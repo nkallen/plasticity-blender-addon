@@ -81,3 +81,10 @@ class PlasticityPanel(bpy.types.Panel):
             box.prop(scene, "prop_plasticity_facet_tolerance", text="Tolerance")
             box.prop(scene, "prop_plasticity_facet_angle", text="Angle")
             refacet_op = box.operator("wm.refacet", text="Refacet")
+
+            box = layout.box()
+            box.label(text="Utilities:")
+            box.operator("mesh.mark_sharp_edges_for_plasticity",
+                         text="Mark Sharp Edges")
+            box.operator("mesh.paint_plasticity_faces",
+                         text="Paint Plasticity Faces")
