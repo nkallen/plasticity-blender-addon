@@ -1,0 +1,467 @@
+import asyncio
+import struct
+import threading
+import weakref
+from asyncio import run_coroutine_threadsafe
+from enum import Enum
+
+import bpy
+import numpy as np
+
+from .libs.websockets import client
+from .libs.websockets.exceptions import (ConnectionClosed, InvalidURI,
+                                         WebSocketException)
+
+max_size = 2 ** 32 - 1
+
+
+class MessageType(Enum):
+    TRANSACTION_1 = 0
+    ADD_1 = 1
+    UPDATE_1 = 2
+    DELETE_1 = 3
+    NEW_VERSION_1 = 4
+    NEW_FILE_1 = 5
+    LIST_ALL_1 = 6
+    LIST_SOME_1 = 7
+    SUBSCRIBE_ALL_1 = 8
+    SUBSCRIBE_SOME_1 = 9
+    REFACET_SOME_1 = 10
+
+
+class ObjectType(Enum):
+    SOLID = 0
+    SHEET = 1
+    WIRE = 2
+    GROUP = 5
+    EMPTY = 6
+
+
+class FacetShapeType(Enum):
+    ANY = 20500
+    CUT = 20501
+    CONVEX = 20502
+
+
+class PlasticityClient:
+    def __init__(self, handler):
+        self.connected = False
+        self.websocket = None
+        self.message_id = 0
+        self.handler = handler
+        self.loop = asyncio.new_event_loop()
+
+    def refresh(self):
+        if self.connected:
+            self.report({'INFO'}, "Refreshing available meshes...")
+
+            future = run_coroutine_threadsafe(
+                self.refresh_async(), self.loop)
+            future.result()
+
+    async def refresh_async(self):
+        self.message_id += 1
+
+        get_objects_message = struct.pack(
+            "<I", MessageType.LIST_ALL_1.value)
+        get_objects_message += struct.pack(
+            "<I", self.message_id)
+        await self.websocket.send(get_objects_message)
+
+    def connect(self):
+        self.report({'INFO'}, "Starting WebSocket client...")
+
+        loop = self.loop
+        websocket_thread = threading.Thread(
+            target=loop.run_until_complete, args=(loop.create_task(self.connect_async()),))
+        websocket_thread.daemon = True
+        websocket_thread.start()
+
+    def refacet(self, plasticity_ids, relative_to_bbox=True, curve_chord_tolerance=0.01, curve_chord_angle=0.35, surface_plane_tolerance=0.01, surface_plane_angle=0.35, match_topology=True, max_sides=3, min_width=0, max_width=0, curve_chord_max=0, shape=FacetShapeType.CUT):
+        if self.connected:
+            self.report({'INFO'}, "Refaceting meshes...")
+
+            future = run_coroutine_threadsafe(
+                self.refacet_async(plasticity_ids, relative_to_bbox, curve_chord_tolerance, curve_chord_angle, surface_plane_tolerance, surface_plane_angle, match_topology, max_sides, min_width, max_width, curve_chord_max, shape), self.loop)
+            future.result()
+
+    async def refacet_async(self, plasticity_ids, relative_to_bbox=True, curve_chord_tolerance=0.01, curve_chord_angle=0.35, surface_plane_tolerance=0.01, surface_plane_angle=0.35, match_topology=True, max_sides=3, min_width=0, max_width=0, curve_chord_max=0, shape=FacetShapeType.CUT):
+        if len(plasticity_ids) == 0:
+            return
+
+        self.message_id += 1
+
+        refacet_message = struct.pack(
+            "<I", MessageType.REFACET_SOME_1.value)
+        refacet_message += struct.pack(
+            "<I", self.message_id)
+        refacet_message += struct.pack(
+            "<I", len(plasticity_ids))
+        for plasticity_id in plasticity_ids:
+            refacet_message += struct.pack(
+                "<I", plasticity_id)
+        refacet_message += struct.pack(
+            "<I", relative_to_bbox)
+        refacet_message += struct.pack(
+            "<f", curve_chord_tolerance)
+        refacet_message += struct.pack(
+            "<f", curve_chord_angle)
+        refacet_message += struct.pack(
+            "<f", surface_plane_tolerance)
+        refacet_message += struct.pack(
+            "<f", surface_plane_angle)
+        refacet_message += struct.pack(
+            "<I", 1 if match_topology else 0)
+        refacet_message += struct.pack(
+            "<I", max_sides)
+        refacet_message += struct.pack(
+            "<f", min_width)
+        refacet_message += struct.pack(
+            "<f", max_width)
+        refacet_message += struct.pack(
+            "<f", curve_chord_max)
+        refacet_message += struct.pack(
+            "<I", shape.value)
+
+        await self.websocket.send(refacet_message)
+
+    async def connect_async(self):
+        self.report({'INFO'}, "Connecting to server")
+        try:
+            async with client.connect("ws://localhost:8080", max_size=max_size) as ws:
+                self.report({'INFO'}, "Connected to server")
+                self.websocket = weakref.proxy(ws)
+                self.connected = True
+                self.message_id = 0
+                get_objects_message = struct.pack(
+                    "<I", MessageType.LIST_ALL_1.value)
+                get_objects_message += struct.pack(
+                    "<I", self.message_id)
+                await ws.send(get_objects_message)
+
+                while True:
+                    try:
+                        self.report({'INFO'}, "Awaiting message")
+                        message = await ws.recv()
+                        self.report({'INFO'}, "Received message")
+                        self.report(
+                            {'INFO'}, f"Message length: {len(message)}")
+                        await self.on_message(ws, message)
+                    except ConnectionClosed as e:
+                        self.report(
+                            {'INFO'}, f"Disconnected from server: {e}")
+                        self.connected = False
+                        self.websocket = None
+                        self.handler.clear()
+                        break
+                    except Exception as e:
+                        self.report({'ERROR'}, f"Exception: {e}")
+        except ConnectionClosed:
+            self.report({'INFO'}, "Disconnected from server")
+            self.connected = False
+            self.websocket = None
+        except InvalidURI:
+            self.report(
+                {'ERROR'}, "Invalid URI for the WebSocket server")
+        except WebSocketException as e:
+            self.report(
+                {'ERROR'}, f"Failed to connect to the server: {e}")
+        except OSError as e:
+            self.report(
+                {'ERROR'}, f"Unable to connect to the server: {e}")
+        except Exception as e:
+            self.report({'ERROR'}, f"Unknown error: {e}")
+
+    async def on_message(self, ws, message):
+        view = memoryview(message)
+        offset = 0
+        message_type = MessageType(
+            int.from_bytes(view[offset:offset + 4], 'little'))
+        offset += 4
+
+        if message_type == MessageType.TRANSACTION_1:
+            self.__on_transaction(view, offset)
+
+        elif message_type == MessageType.LIST_ALL_1:
+            message_id = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
+
+            self.__on_transaction(view, offset)
+
+        elif message_type == MessageType.NEW_VERSION_1:
+            version = int.from_bytes(view[offset:offset + 4], 'little')
+
+            bpy.app.timers.register(lambda: self.handler.new_version(
+                version), first_interval=0.001)
+
+        elif message_type == MessageType.REFACET_SOME_1:
+            self.__on_refacet(view, offset)
+
+    def __on_transaction(self, view, offset):
+        filename_length = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        filename = view[offset:offset +
+                        filename_length].tobytes().decode('utf-8')
+        offset += filename_length
+
+        # Add string padding for byte alignment
+        padding = (4 - (filename_length % 4)) % 4
+        offset += padding
+
+        version = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        num_messages = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        self.report({'INFO'}, f"Filename: {filename}")
+        self.report({'INFO'}, f"Version: {version}")
+        self.report({'INFO'}, f"Num messages: {num_messages}")
+
+        transaction = {"filename": filename, "version": version,
+                       "delete": [], "add": [], "update": []}
+        for _ in range(num_messages):
+            item_length = int.from_bytes(
+                view[offset:offset + 4], 'little')
+            offset += 4
+
+            self.on_message_item(
+                view[offset:offset + item_length], transaction)
+            offset += item_length
+
+        bpy.app.timers.register(lambda: self.handler.update(
+            transaction), first_interval=0.001)
+
+    def __on_refacet(self, view, offset):
+        message_id = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        filename_length = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        filename = view[offset:offset +
+                        filename_length].tobytes().decode('utf-8')
+        offset += filename_length
+
+        # Add string padding for byte alignment
+        padding = (4 - (filename_length % 4)) % 4
+        offset += padding
+
+        file_version = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        num_items = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        self.report({'INFO'}, f"Message ID: {message_id}")
+        self.report({'INFO'}, f"Num items: {num_items}")
+
+        plasticity_ids = []
+        versions = []
+        faces = []
+        positions = []
+        indices = []
+        normals = []
+        groups = []
+        face_ids = []
+
+        for _ in range(num_items):
+            plasticity_id = int.from_bytes(
+                view[offset:offset + 4], 'little')
+            offset += 4
+
+            version = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
+
+            num_face_facets = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
+
+            face = np.frombuffer(
+                view[offset:offset + num_face_facets * 4], dtype=np.int32)
+            offset += num_face_facets * 4
+
+            num_positions = int.from_bytes(
+                view[offset:offset + 4], 'little')
+            offset += 4
+
+            position = np.frombuffer(
+                view[offset:offset + num_positions * 4], dtype=np.float32)
+            offset += num_positions * 4
+
+            num_index = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
+
+            index = np.frombuffer(
+                view[offset:offset + num_index * 4], dtype=np.int32)
+            offset += num_index * 4
+
+            num_normals = int.from_bytes(
+                view[offset:offset + 4], 'little')
+            offset += 4
+
+            normal = np.frombuffer(
+                view[offset:offset + num_normals * 4], dtype=np.float32)
+            offset += num_normals * 4
+
+            num_groups = int.from_bytes(
+                view[offset:offset + 4], 'little')
+            offset += 4
+
+            group = np.frombuffer(
+                view[offset:offset + num_groups * 4], dtype=np.int32)
+            offset += num_groups * 4
+
+            num_face_ids = int.from_bytes(
+                view[offset:offset + 4], 'little')
+            offset += 4
+
+            face_id = np.frombuffer(
+                view[offset:offset + num_face_ids * 4], dtype=np.int32)
+            offset += num_face_ids * 4
+
+            plasticity_ids.append(plasticity_id)
+            versions.append(version)
+            faces.append(face)
+            positions.append(position)
+            indices.append(index)
+            normals.append(normal)
+            groups.append(group)
+            face_ids.append(face_id)
+
+        bpy.app.timers.register(lambda: self.handler.refacet(filename, file_version, plasticity_ids,
+                                versions, faces, positions, indices, normals, groups, face_ids), first_interval=0.001)
+
+    def on_message_item(self, view, transaction):
+        offset = 0
+        message_type = MessageType(
+            int.from_bytes(view[offset:offset + 4], 'little'))
+        offset += 4
+
+        self.report({'INFO'}, f"Message type: {message_type}")
+
+        if message_type == MessageType.DELETE_1:
+            transaction["delete"].extend(
+                np.frombuffer(view[4:], dtype=np.int32))
+        elif message_type == MessageType.ADD_1:
+            transaction["add"].extend(decode_objects(view[4:]))
+        elif message_type == MessageType.UPDATE_1:
+            transaction["update"].extend(decode_objects(view[4:]))
+
+    def disconnect(self):
+        if self.connected:
+            self.report({'INFO'}, "Closing WebSocket connection...")
+
+            future = run_coroutine_threadsafe(
+                self.disconnect_async(), self.loop)
+            future.result()
+        else:
+            self.report({'INFO'}, "Not connected, nothing to disconnect")
+
+    async def disconnect_async(self):
+        websocket = self.websocket
+        if websocket:
+            await websocket.close()
+            del self.websocket
+
+        self.connected = False
+        self.handler.clear()
+        self.websocket = None
+        self.report({'INFO'}, "Disconnected from Plasticity server")
+        return {'FINISHED'}
+
+    def report(self, level, message):
+        self.handler.report(level, message)
+
+
+def decode_objects(buffer):
+    view = memoryview(buffer)
+    num_objects = int.from_bytes(view[:4], 'little')
+    offset = 4
+    objects = []
+
+    for _ in range(num_objects):
+        object_type, object_id, version_id, parent_id, material_id, flags, name, vertices, faces, normals, offset, groups, face_ids = decode_object_data(
+            view, offset)
+        objects.append({"type": object_type, "id": object_id, "version": version_id, "parent_id": parent_id, "material_id": material_id,
+                       "flags": flags, "name": name, "vertices": vertices, "faces": faces, "normals": normals, "groups": groups, "face_ids": face_ids})
+
+    return objects
+
+
+def decode_object_data(view, offset):
+    object_type = int.from_bytes(view[offset:offset + 4], 'little')
+    offset += 4
+
+    object_id = int.from_bytes(view[offset:offset + 4], 'little')
+    offset += 4
+
+    version_id = int.from_bytes(view[offset:offset + 4], 'little')
+    offset += 4
+
+    parent_id = int.from_bytes(view[offset:offset + 4], 'little', signed=True)
+    offset += 4
+
+    material_id = int.from_bytes(
+        view[offset:offset + 4], 'little', signed=True)
+    offset += 4
+
+    flags = int.from_bytes(view[offset:offset + 4], 'little')
+    offset += 4
+
+    name_length = int.from_bytes(view[offset:offset + 4], 'little')
+    offset += 4
+
+    name = view[offset:offset + name_length].tobytes().decode('utf-8')
+    offset += name_length
+
+    # Add string padding for byte alignment
+    padding = (4 - (name_length % 4)) % 4
+    offset += padding
+
+    vertices = None
+    faces = None
+    normals = None
+    groups = None
+    face_ids = None
+
+    if object_type == ObjectType.SOLID.value or object_type == ObjectType.SHEET.value:
+        num_vertices = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        vertices = np.frombuffer(
+            view[offset:offset + num_vertices * 12], dtype=np.float32)
+        offset += num_vertices * 12
+
+        num_faces = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        faces = np.frombuffer(
+            view[offset:offset + num_faces * 12], dtype=np.int32)
+        offset += num_faces * 12
+
+        num_normals = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        normals = np.frombuffer(
+            view[offset:offset + num_normals * 12], dtype=np.float32)
+        offset += num_normals * 12
+
+        num_groups = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        groups = np.frombuffer(
+            view[offset:offset + num_groups * 4], dtype=np.int32)
+        offset += num_groups * 4
+
+        num_face_ids = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        face_ids = np.frombuffer(
+            view[offset:offset + num_face_ids * 4], dtype=np.int32)
+        offset += num_face_ids * 4
+
+    elif object_type == ObjectType.GROUP.value:
+        pass
+
+    return object_type, object_id, version_id, parent_id, material_id, flags, name, vertices, faces, normals, offset, groups, face_ids
