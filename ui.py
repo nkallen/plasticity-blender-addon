@@ -84,7 +84,9 @@ class PlasticityPanel(bpy.types.Panel):
 
             box = layout.box()
             box.label(text="Utilities:")
+            box.operator("mesh.mark_sharp_edges_for_plasticity_with_split_normals",
+                         text="Mark sharp (EXPERIMENTAL)")
             box.operator("mesh.mark_sharp_edges_for_plasticity",
-                         text="Mark Sharp Edges")
+                         text="Mark sharp at boundaries")
             box.operator("mesh.paint_plasticity_faces",
                          text="Paint Plasticity Faces")

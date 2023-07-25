@@ -55,8 +55,8 @@ class SelectByFaceIDOperator(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class MarkSharpEdgesForPlasticityOperator(bpy.types.Operator):
-    bl_idname = "mesh.mark_sharp_edges_for_plasticity"
+class MarkSharpEdgesForPlasticityGroupsWithSplitNormalsOperator(bpy.types.Operator):
+    bl_idname = "mesh.mark_sharp_edges_for_plasticity_with_split_normals"
     bl_label = "Mark Sharp Edges for Plasticity Groups"
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -69,6 +69,13 @@ class MarkSharpEdgesForPlasticityOperator(bpy.types.Operator):
         obj = context.object
         mesh = obj.data
 
+        prev_obj_mode = bpy.context.object.mode
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.remove_doubles(threshold=1e-06)
+        bpy.ops.object.mode_set(mode='OBJECT')
+
         if "plasticity_id" not in obj.keys():
             self.report(
                 {'ERROR'}, "Object doesn't have a plasticity_id attribute.")
@@ -78,8 +85,11 @@ class MarkSharpEdgesForPlasticityOperator(bpy.types.Operator):
 
         self.mark_sharp_edges(obj, groups)
 
+        bpy.ops.object.mode_set(mode=prev_obj_mode)
+
         return {'FINISHED'}
 
+    # NOTE: This doesn't really work. It's just a proof of concept.
     def mark_sharp_edges(self, obj, groups):
         mesh = obj.data
         bm = bmesh.new()
@@ -131,12 +141,88 @@ class MarkSharpEdgesForPlasticityOperator(bpy.types.Operator):
         bm.free()
 
 
+class MarkSharpEdgesForPlasticityGroupsOperator(bpy.types.Operator):
+    bl_idname = "mesh.mark_sharp_edges_for_plasticity"
+    bl_label = "Mark Sharp Edges for Plasticity Groups"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.object
+        return obj is not None and obj.type == 'MESH' and "plasticity_id" in obj.keys()
+
+    def execute(self, context):
+        obj = context.object
+        mesh = obj.data
+
+        prev_obj_mode = bpy.context.object.mode
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.remove_doubles(threshold=1e-06)
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        if "plasticity_id" not in obj.keys():
+            self.report(
+                {'ERROR'}, "Object doesn't have a plasticity_id attribute.")
+            return {'CANCELLED'}
+
+        groups = mesh["groups"]
+
+        self.mark_sharp_edges(obj, groups)
+
+        bpy.ops.object.mode_set(mode=prev_obj_mode)
+
+        return {'FINISHED'}
+
+    def mark_sharp_edges(self, obj, groups):
+        mesh = obj.data
+        bm = bmesh.new()
+        mesh.calc_normals_split()
+        bm.from_mesh(mesh)
+        bm.edges.ensure_lookup_table()
+        bm.verts.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
+        loops = mesh.loops
+
+        edge_lookup = {
+            (e.verts[0].index, e.verts[1].index): e for e in bm.edges}
+
+        all_face_boundary_edges = set()
+        for idx in range(0, len(groups), 2):
+            start_idx = groups[idx] // 3
+            count = groups[idx + 1] // 3
+            end_idx = start_idx + count
+
+            face_boundary_edges = set()
+            for face_idx in range(start_idx, end_idx):
+                face = bm.faces[face_idx]
+                for edge in face.edges:
+                    verts = (edge.verts[0].index, edge.verts[1].index)
+                    if verts in edge_lookup:
+                        if edge in face_boundary_edges:
+                            face_boundary_edges.remove(edge)
+                        else:
+                            face_boundary_edges.add(edge)
+            all_face_boundary_edges.update(face_boundary_edges)
+
+        for edge in all_face_boundary_edges:
+            edge.smooth = False
+
+        bm.to_mesh(obj.data)
+        bm.free()
+
+
 class PaintPlasticityFacesOperator(bpy.types.Operator):
     bl_idname = "mesh.paint_plasticity_faces"
     bl_label = "Paint Plasticity Faces"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
+        prev_obj_mode = bpy.context.object.mode
+        if prev_obj_mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+
         obj = context.object
         mesh = obj.data
 
@@ -146,6 +232,8 @@ class PaintPlasticityFacesOperator(bpy.types.Operator):
             return {'CANCELLED'}
 
         self.colorize_mesh(obj, mesh)
+
+        bpy.ops.object.mode_set(mode=prev_obj_mode)
 
         return {'FINISHED'}
 
