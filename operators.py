@@ -100,26 +100,7 @@ class MarkSharpEdgesForPlasticityGroupsWithSplitNormalsOperator(bpy.types.Operat
         bm.faces.ensure_lookup_table()
         loops = mesh.loops
 
-        edge_lookup = {
-            (e.verts[0].index, e.verts[1].index): e for e in bm.edges}
-
-        all_face_boundary_edges = set()
-        for idx in range(0, len(groups), 2):
-            start_idx = groups[idx] // 3
-            count = groups[idx + 1] // 3
-            end_idx = start_idx + count
-
-            face_boundary_edges = set()
-            for face_idx in range(start_idx, end_idx):
-                face = bm.faces[face_idx]
-                for edge in face.edges:
-                    verts = (edge.verts[0].index, edge.verts[1].index)
-                    if verts in edge_lookup:
-                        if edge in face_boundary_edges:
-                            face_boundary_edges.remove(edge)
-                        else:
-                            face_boundary_edges.add(edge)
-            all_face_boundary_edges.update(face_boundary_edges)
+        all_face_boundary_edges = face_boundary_edges(groups, mesh, bm)
 
         split_edges = set()
         for vert in bm.verts:
@@ -183,34 +164,42 @@ class MarkSharpEdgesForPlasticityGroupsOperator(bpy.types.Operator):
         bm.edges.ensure_lookup_table()
         bm.verts.ensure_lookup_table()
         bm.faces.ensure_lookup_table()
-        loops = mesh.loops
 
-        edge_lookup = {
-            (e.verts[0].index, e.verts[1].index): e for e in bm.edges}
-
-        all_face_boundary_edges = set()
-        for idx in range(0, len(groups), 2):
-            start_idx = groups[idx] // 3
-            count = groups[idx + 1] // 3
-            end_idx = start_idx + count
-
-            face_boundary_edges = set()
-            for face_idx in range(start_idx, end_idx):
-                face = bm.faces[face_idx]
-                for edge in face.edges:
-                    verts = (edge.verts[0].index, edge.verts[1].index)
-                    if verts in edge_lookup:
-                        if edge in face_boundary_edges:
-                            face_boundary_edges.remove(edge)
-                        else:
-                            face_boundary_edges.add(edge)
-            all_face_boundary_edges.update(face_boundary_edges)
-
-        for edge in all_face_boundary_edges:
+        for edge in face_boundary_edges(groups, mesh, bm):
             edge.smooth = False
 
         bm.to_mesh(obj.data)
         bm.free()
+
+
+def face_boundary_edges(groups, mesh, bm):
+    all_face_boundary_edges = set()
+    face_boundary_edges = set()
+
+    group_idx = 0
+    group_start = groups[group_idx * 2 + 0]
+    group_count = groups[group_idx * 2 + 1]
+    face_boundary_edges = set()
+
+    for poly in mesh.polygons:
+        loop_start = poly.loop_start
+        if loop_start >= group_start + group_count:
+            all_face_boundary_edges.update(face_boundary_edges)
+            group_idx += 1
+            group_start = groups[group_idx * 2 + 0]
+            group_count = groups[group_idx * 2 + 1]
+            face_boundary_edges = set()
+
+        face = bm.faces[poly.index]
+        for edge in face.edges:
+            verts = (edge.verts[0].index, edge.verts[1].index)
+            if edge in face_boundary_edges:
+                face_boundary_edges.remove(edge)
+            else:
+                face_boundary_edges.add(edge)
+    all_face_boundary_edges.update(face_boundary_edges)
+
+    return all_face_boundary_edges
 
 
 class PaintPlasticityFacesOperator(bpy.types.Operator):
