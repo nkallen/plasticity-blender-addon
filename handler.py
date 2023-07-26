@@ -150,7 +150,6 @@ class SceneHandler:
             normals = item['normals']
             groups = item['groups']
             face_ids = item['face_ids']
-            print(flags)
             is_hidden = flags & 1
             is_visible = flags & 2
             is_selectable = flags & 4
@@ -216,15 +215,20 @@ class SceneHandler:
             plasticity_collection = bpy.data.collections.new("Plasticity")
             bpy.context.scene.collection.children.link(plasticity_collection)
 
-        filename_collection = bpy.data.collections.get(filename)
+        filename_collection = plasticity_collection.children.get(filename)
         if not filename_collection:
             filename_collection = bpy.data.collections.new(filename)
             plasticity_collection.children.link(filename_collection)
 
-        inbox_collection = bpy.data.collections.get("Inbox")
+        inbox_collections = [
+            child for child in filename_collection.children if "inbox" in child]
+        inbox_collection = None
+        if len(inbox_collections) > 0:
+            inbox_collection = inbox_collections[0]
         if not inbox_collection:
             inbox_collection = bpy.data.collections.new("Inbox")
             filename_collection.children.link(inbox_collection)
+            inbox_collection["inbox"] = True
         return inbox_collection
 
     def __prepare(self, filename):
