@@ -218,6 +218,10 @@ class PaintPlasticityFacesOperator(bpy.types.Operator):
     bl_label = "Paint Plasticity Faces"
     bl_options = {'REGISTER', 'UNDO'}
 
+    @classmethod
+    def poll(cls, context):
+        return any("plasticity_id" in obj.keys() for obj in context.selected_objects)
+
     def execute(self, context):
         prev_obj_mode = bpy.context.object.mode
         if prev_obj_mode != 'OBJECT':

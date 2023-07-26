@@ -22,11 +22,15 @@ class MessageType(Enum):
     DELETE_1 = 3
     NEW_VERSION_1 = 4
     NEW_FILE_1 = 5
+
     LIST_ALL_1 = 6
     LIST_SOME_1 = 7
-    SUBSCRIBE_ALL_1 = 8
-    SUBSCRIBE_SOME_1 = 9
-    REFACET_SOME_1 = 10
+    LIST_VISIBLE_1 = 8
+
+    SUBSCRIBE_ALL_1 = 10
+    SUBSCRIBE_SOME_1 = 11
+
+    REFACET_SOME_1 = 15
 
 
 class ObjectType(Enum):
@@ -46,20 +50,21 @@ class FacetShapeType(Enum):
 class PlasticityClient:
     def __init__(self, handler):
         self.connected = False
+        self.subscribed = False
         self.websocket = None
         self.message_id = 0
         self.handler = handler
         self.loop = asyncio.new_event_loop()
 
-    def refresh(self):
+    def list_all(self):
         if self.connected:
             self.report({'INFO'}, "Refreshing available meshes...")
 
             future = run_coroutine_threadsafe(
-                self.refresh_async(), self.loop)
+                self.list_all_async(), self.loop)
             future.result()
 
-    async def refresh_async(self):
+    async def list_all_async(self):
         self.message_id += 1
 
         get_objects_message = struct.pack(
@@ -68,24 +73,93 @@ class PlasticityClient:
             "<I", self.message_id)
         await self.websocket.send(get_objects_message)
 
-    def connect(self):
-        self.report({'INFO'}, "Starting WebSocket client...")
+    def list_visible(self):
+        if self.connected:
+            self.report({'INFO'}, "Refreshing visible meshes...")
 
-        loop = self.loop
-        websocket_thread = threading.Thread(
-            target=loop.run_until_complete, args=(loop.create_task(self.connect_async()),))
-        websocket_thread.daemon = True
-        websocket_thread.start()
+            future = run_coroutine_threadsafe(
+                self.list_visible_async(), self.loop)
+            future.result()
 
-    def refacet(self, plasticity_ids, relative_to_bbox=True, curve_chord_tolerance=0.01, curve_chord_angle=0.35, surface_plane_tolerance=0.01, surface_plane_angle=0.35, match_topology=True, max_sides=3, min_width=0, max_width=0, curve_chord_max=0, shape=FacetShapeType.CUT):
+    async def list_visible_async(self):
+        self.message_id += 1
+
+        get_objects_message = struct.pack(
+            "<I", MessageType.LIST_VISIBLE_1.value)
+        get_objects_message += struct.pack(
+            "<I", self.message_id)
+        await self.websocket.send(get_objects_message)
+
+    def subscribe_all(self):
+        if self.connected:
+            self.report({'INFO'}, "Subscribing to all meshes...")
+
+            future = run_coroutine_threadsafe(
+                self.subscribe_all_async(), self.loop)
+            future.result()
+            self.subscribed = True
+
+    async def subscribe_all_async(self):
+        self.message_id += 1
+
+        subscribe_message = struct.pack(
+            "<I", MessageType.SUBSCRIBE_ALL_1.value)
+        subscribe_message += struct.pack(
+            "<I", self.message_id)
+        await self.websocket.send(subscribe_message)
+
+    def unsubscribe_all(self):
+        if self.connected:
+            self.report({'INFO'}, "Unsubscribing to all meshes...")
+
+            future = run_coroutine_threadsafe(
+                self.unsubscribe_all_async(), self.loop)
+            future.result()
+            self.subscribed = False
+
+    async def unsubscribe_all_async(self):
+        self.message_id += 1
+
+        subscribe_message = struct.pack(
+            "<I", MessageType.UNSUBSCRIBE_ALL_1.value)
+        subscribe_message += struct.pack(
+            "<I", self.message_id)
+        await self.websocket.send(subscribe_message)
+
+    def subscribe_some(self, plasticity_ids):
+        if self.connected:
+            self.report({'INFO'}, "Subscribing to meshes...")
+
+            future = run_coroutine_threadsafe(
+                self.subscribe_some_async(plasticity_ids), self.loop)
+            future.result()
+
+    async def subscribe_some_async(self, plasticity_ids):
+        if len(plasticity_ids) == 0:
+            return
+
+        self.message_id += 1
+
+        subscribe_message = struct.pack(
+            "<I", MessageType.SUBSCRIBE_SOME_1.value)
+        subscribe_message += struct.pack(
+            "<I", self.message_id)
+        subscribe_message += struct.pack(
+            "<I", len(plasticity_ids))
+        for plasticity_id in plasticity_ids:
+            subscribe_message += struct.pack(
+                "<I", plasticity_id)
+        await self.websocket.send(subscribe_message)
+
+    def refacet_some(self, plasticity_ids, relative_to_bbox=True, curve_chord_tolerance=0.01, curve_chord_angle=0.35, surface_plane_tolerance=0.01, surface_plane_angle=0.35, match_topology=True, max_sides=3, min_width=0, max_width=0, curve_chord_max=0, shape=FacetShapeType.CUT):
         if self.connected:
             self.report({'INFO'}, "Refaceting meshes...")
 
             future = run_coroutine_threadsafe(
-                self.refacet_async(plasticity_ids, relative_to_bbox, curve_chord_tolerance, curve_chord_angle, surface_plane_tolerance, surface_plane_angle, match_topology, max_sides, min_width, max_width, curve_chord_max, shape), self.loop)
+                self.refacet_some_async(plasticity_ids, relative_to_bbox, curve_chord_tolerance, curve_chord_angle, surface_plane_tolerance, surface_plane_angle, match_topology, max_sides, min_width, max_width, curve_chord_max, shape), self.loop)
             future.result()
 
-    async def refacet_async(self, plasticity_ids, relative_to_bbox=True, curve_chord_tolerance=0.01, curve_chord_angle=0.35, surface_plane_tolerance=0.01, surface_plane_angle=0.35, match_topology=True, max_sides=3, min_width=0, max_width=0, curve_chord_max=0, shape=FacetShapeType.CUT):
+    async def refacet_some_async(self, plasticity_ids, relative_to_bbox=True, curve_chord_tolerance=0.01, curve_chord_angle=0.35, surface_plane_tolerance=0.01, surface_plane_angle=0.35, match_topology=True, max_sides=3, min_width=0, max_width=0, curve_chord_max=0, shape=FacetShapeType.CUT):
         if len(plasticity_ids) == 0:
             return
 
@@ -125,6 +199,15 @@ class PlasticityClient:
 
         await self.websocket.send(refacet_message)
 
+    def connect(self):
+        self.report({'INFO'}, "Starting WebSocket client...")
+
+        loop = self.loop
+        websocket_thread = threading.Thread(
+            target=loop.run_until_complete, args=(loop.create_task(self.connect_async()),))
+        websocket_thread.daemon = True
+        websocket_thread.start()
+
     async def connect_async(self):
         self.report({'INFO'}, "Connecting to server")
         try:
@@ -133,11 +216,6 @@ class PlasticityClient:
                 self.websocket = weakref.proxy(ws)
                 self.connected = True
                 self.message_id = 0
-                get_objects_message = struct.pack(
-                    "<I", MessageType.LIST_ALL_1.value)
-                get_objects_message += struct.pack(
-                    "<I", self.message_id)
-                await ws.send(get_objects_message)
 
                 while True:
                     try:

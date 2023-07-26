@@ -32,9 +32,12 @@ def right_click_menu(self, context):
 
 def register():
     print("Registering Plasticity client")
-    bpy.utils.register_class(ui.RefreshButton)
+
     bpy.utils.register_class(ui.ConnectButton)
     bpy.utils.register_class(ui.DisconnectButton)
+    bpy.utils.register_class(ui.ListButton)
+    bpy.utils.register_class(ui.SubscribeAllButton)
+    bpy.utils.register_class(ui.UnsubscribeAllButton)
     bpy.utils.register_class(ui.RefacetButton)
     bpy.utils.register_class(ui.PlasticityPanel)
     bpy.utils.register_class(operators.SelectByFaceIDOperator)
@@ -43,12 +46,16 @@ def register():
     bpy.utils.register_class(
         operators.MarkSharpEdgesForPlasticityGroupsOperator)
     bpy.utils.register_class(operators.PaintPlasticityFacesOperator)
+
     bpy.types.VIEW3D_MT_object_context_menu.append(right_click_menu)
     bpy.types.VIEW3D_MT_edit_mesh_select_similar.append(select_similar)
+
     bpy.types.Scene.prop_plasticity_facet_tolerance = bpy.props.FloatProperty(
         name="Tolerance", default=0.01, min=0.0001, max=1.0)
     bpy.types.Scene.prop_plasticity_facet_angle = bpy.props.FloatProperty(
         name="Angle", default=0.45, min=0.1, max=1.0)
+    bpy.types.Scene.prop_plasticity_list_only_visible = bpy.props.BoolProperty(
+        name="List only visible", default=False)
 
     print("Plasticity client registered")
 
@@ -59,7 +66,9 @@ def unregister():
     bpy.utils.unregister_class(ui.PlasticityPanel)
     bpy.utils.unregister_class(ui.DisconnectButton)
     bpy.utils.unregister_class(ui.ConnectButton)
-    bpy.utils.unregister_class(ui.RefreshButton)
+    bpy.utils.unregister_class(ui.ListButton)
+    bpy.utils.unregister_class(ui.SubscribeAllButton)
+    bpy.utils.unregister_class(ui.UnsubscribeAllButton)
     bpy.utils.unregister_class(ui.RefacetButton)
     bpy.utils.unregister_class(operators.SelectByFaceIDOperator)
     bpy.utils.unregister_class(
@@ -67,10 +76,13 @@ def unregister():
     bpy.utils.unregister_class(
         operators.MarkSharpEdgesForPlasticityGroupsOperator)
     bpy.utils.unregister_class(operators.PaintPlasticityFacesOperator)
+
     bpy.types.VIEW3D_MT_object_context_menu.remove(right_click_menu)
     bpy.types.VIEW3D_MT_edit_mesh_select_similar.remove(select_similar)
+
     del bpy.types.Scene.prop_plasticity_facet_tolerance
     del bpy.types.Scene.prop_plasticity_facet_angle
+    del bpy.types.Scene.prop_plasticity_list_only_visible
 
 
 if __name__ == "__main__":
