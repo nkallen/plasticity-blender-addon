@@ -20,17 +20,19 @@ class MessageType(Enum):
     ADD_1 = 1
     UPDATE_1 = 2
     DELETE_1 = 3
-    NEW_VERSION_1 = 4
-    NEW_FILE_1 = 5
+    MOVE_1 = 4
+    ATTRIBUTE_1 = 5
 
-    LIST_ALL_1 = 6
-    LIST_SOME_1 = 7
-    LIST_VISIBLE_1 = 8
+    NEW_VERSION_1 = 10
+    NEW_FILE_1 = 11
 
-    SUBSCRIBE_ALL_1 = 10
-    SUBSCRIBE_SOME_1 = 11
-
-    REFACET_SOME_1 = 15
+    LIST_ALL_1 = 20
+    LIST_SOME_1 = 21
+    LIST_VISIBLE_1 = 22
+    SUBSCRIBE_ALL_1 = 23
+    SUBSCRIBE_SOME_1 = 24
+    UNSUBSCRIBE_ALL_1 = 25
+    REFACET_SOME_1 = 26
 
 
 class ObjectType(Enum):
