@@ -129,6 +129,7 @@ class SceneHandler:
         self.files[filename][PlasticityIdUniquenessScope.ITEM][plasticity_id] = mesh_obj
         mesh_obj["plasticity_id"] = plasticity_id
         mesh_obj["plasticity_filename"] = filename
+        return mesh_obj
 
     def __delete_object(self, filename, version, plasticity_id):
         obj = self.files[filename][PlasticityIdUniquenessScope.ITEM].pop(
@@ -149,21 +150,32 @@ class SceneHandler:
             normals = item['normals']
             groups = item['groups']
             face_ids = item['face_ids']
+            print(flags)
+            is_hidden = flags & 1
+            is_visible = flags & 2
+            is_selectable = flags & 4
 
             if object_type == ObjectType.SOLID.value or object_type == ObjectType.SHEET.value:
+                obj = None
                 if plasticity_id not in self.files[filename][PlasticityIdUniquenessScope.ITEM]:
                     mesh = self.__create_mesh(
                         name, verts, faces, normals, groups, face_ids)
-                    self.__add_object(inbox_collection, filename, object_type,
-                                      plasticity_id, name, mesh)
+                    obj = self.__add_object(inbox_collection, filename, object_type,
+                                            plasticity_id, name, mesh)
                 else:
                     obj = self.files[filename][PlasticityIdUniquenessScope.ITEM].get(
                         plasticity_id)
                     if obj:
                         self.__update_object(
                             obj, object_type, version, name, verts, faces, normals, groups, face_ids)
+
+                if obj:
+                    obj.hide_set(is_hidden or not is_visible)
+                    obj.hide_select = not is_selectable
+
             elif object_type == ObjectType.GROUP.value:
                 if plasticity_id > 0:
+                    group_collection = None
                     if plasticity_id not in self.files[filename][PlasticityIdUniquenessScope.GROUP]:
                         group_collection = bpy.data.collections.new(name)
                         group_collection["plasticity_id"] = plasticity_id
@@ -174,6 +186,10 @@ class SceneHandler:
                         group_collection = self.files[filename][PlasticityIdUniquenessScope.GROUP].get(
                             plasticity_id)
                         group_collection.name = name
+
+                    if group_collection:
+                        group_collection.hide_viewport = not is_hidden or not is_visible
+                        group_collection.hide_select = not is_selectable
 
         for item in objects:
             object_type = item['type']
