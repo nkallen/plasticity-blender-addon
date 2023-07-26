@@ -361,6 +361,9 @@ class PlasticityClient:
                 view[offset:offset + num_face_facets * 4], dtype=np.int32)
             offset += num_face_facets * 4
 
+            print("face")
+            print(face)
+
             num_positions = int.from_bytes(
                 view[offset:offset + 4], 'little')
             offset += 4

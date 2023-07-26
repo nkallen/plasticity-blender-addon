@@ -56,6 +56,14 @@ def register():
         name="Angle", default=0.45, min=0.1, max=1.0)
     bpy.types.Scene.prop_plasticity_list_only_visible = bpy.props.BoolProperty(
         name="List only visible", default=False)
+    bpy.types.Scene.prop_plasticity_facet_tri_or_ngon = bpy.props.EnumProperty(
+        items=[
+            ("TRI", "Tri", "Tri"),
+            ("NGON", "Ngon", "Ngon"),
+        ],
+        name="Facet Type",
+        default="TRI",
+    )
 
     print("Plasticity client registered")
 
@@ -82,6 +90,7 @@ def unregister():
 
     del bpy.types.Scene.prop_plasticity_facet_tolerance
     del bpy.types.Scene.prop_plasticity_facet_angle
+    del bpy.types.Scene.prop_plasticity_facet_tri_or_ngon
     del bpy.types.Scene.prop_plasticity_list_only_visible
 
 

@@ -91,17 +91,18 @@ class RefacetButton(bpy.types.Operator):
     def execute(self, context):
         prop_tolerance = context.scene.prop_plasticity_facet_tolerance
         prop_angle = context.scene.prop_plasticity_facet_angle
+        prop_max_sides = 3 if context.scene.prop_plasticity_facet_tri_or_ngon == "TRI" else 128
         plasticity_ids = [obj["plasticity_id"]
                           for obj in context.selected_objects if "plasticity_id" in obj.keys()]
 
         plasticity_client.refacet_some(plasticity_ids, curve_chord_tolerance=prop_tolerance,
-                                       surface_plane_tolerance=prop_tolerance, curve_chord_angle=prop_angle, surface_plane_angle=prop_angle)
+                                       surface_plane_tolerance=prop_tolerance, curve_chord_angle=prop_angle, surface_plane_angle=prop_angle, max_sides=prop_max_sides)
 
         return {'FINISHED'}
 
 
 class PlasticityPanel(bpy.types.Panel):
-    bl_idname = "plasticity_panel"
+    bl_idname = "OBJECT_PT_plasticity_panel"
     bl_label = "Plasticity"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -136,6 +137,8 @@ class PlasticityPanel(bpy.types.Panel):
             box = layout.box()
             box.label(text="Refacet config:")
 
+            box.prop(scene, "prop_plasticity_facet_tri_or_ngon",
+                     text="Tri or Ngon", expand=True)
             box.prop(scene, "prop_plasticity_facet_tolerance", text="Tolerance")
             box.prop(scene, "prop_plasticity_facet_angle", text="Angle")
             refacet_op = box.operator("wm.refacet", text="Refacet")

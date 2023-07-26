@@ -21,6 +21,8 @@ class ObjectType(Enum):
 
 class SceneHandler:
     def __init__(self):
+        # NOTE: filename -> [item/group] -> id -> object
+        # FIXME: it turns out that caching this is unsafe with undo/redo; for now call __prepare() before every update
         self.files = {}
 
     def __create_mesh(self, name, verts, indices, normals, groups, face_ids):
@@ -89,9 +91,21 @@ class SceneHandler:
         mesh.loops.add(len(indices))
         mesh.loops.foreach_set("vertex_index", indices)
 
-        mesh.polygons.add(len(indices) // 3)
-        mesh.polygons.foreach_set("loop_start", range(0, len(indices), 3))
-        mesh.polygons.foreach_set("loop_total", [3] * (len(indices) // 3))
+        if (len(faces) == 0):
+            mesh.polygons.add(len(indices) // 3)
+            mesh.polygons.foreach_set("loop_start", range(0, len(indices), 3))
+            mesh.polygons.foreach_set("loop_total", [3] * (len(indices) // 3))
+        else:
+            # Find where a new face/polygon starts (value changes in the array)
+            diffs = np.where(np.diff(faces))[0] + 1
+            # Insert the starting index for the first polygon
+            loop_start = np.insert(diffs, 0, 0)
+            # Calculate the number of vertices per polygon
+            loop_total = np.append(np.diff(loop_start), [
+                                   len(faces) - loop_start[-1]])
+            mesh.polygons.add(len(loop_start))
+            mesh.polygons.foreach_set("loop_start", loop_start)
+            mesh.polygons.foreach_set("loop_total", loop_total)
 
         mesh["groups"] = groups
         mesh["face_ids"] = face_ids
@@ -257,6 +271,8 @@ class SceneHandler:
     def refacet(self, filename, version, plasticity_ids, versions, faces, positions, indices, normals, groups, face_ids):
         self.report({'INFO'}, "Refaceting " + filename +
                     " to version " + str(version))
+
+        self.__prepare(filename)
 
         prev_obj_mode = bpy.context.object.mode
         prev_active_object = bpy.context.view_layer.objects.active
