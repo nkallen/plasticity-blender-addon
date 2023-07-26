@@ -89,7 +89,6 @@ class MarkSharpEdgesForPlasticityGroupsWithSplitNormalsOperator(bpy.types.Operat
 
         return {'FINISHED'}
 
-    # NOTE: This doesn't really work. It's just a proof of concept.
     def mark_sharp_edges(self, obj, groups):
         mesh = obj.data
         bm = bmesh.new()
@@ -104,16 +103,19 @@ class MarkSharpEdgesForPlasticityGroupsWithSplitNormalsOperator(bpy.types.Operat
 
         split_edges = set()
         for vert in bm.verts:
-            link_loops = vert.link_loops
-            for loop1_idx in range(len(link_loops)):
-                loop1 = link_loops[loop1_idx]
-                for loop2_idx in range(loop1_idx + 1, len(link_loops)):
-                    loop2 = link_loops[loop2_idx]
-                    normal1 = loops[loop1.index].normal
-                    normal2 = loops[loop2.index].normal
-                    if are_normals_different(normal1, normal2):
-                        split_edges.add(loop1.edge)
-
+            for edge in vert.link_edges:
+                loops_for_vert_and_edge = []
+                for face in edge.link_faces:
+                    for loop in face.loops:
+                        if loop.vert == vert:
+                            loops_for_vert_and_edge.append(loop)
+                if len(loops_for_vert_and_edge) != 2:
+                    continue
+                loop1, loop2 = loops_for_vert_and_edge
+                normal1 = loops[loop1.index].normal
+                normal2 = loops[loop2.index].normal
+                if are_normals_different(normal1, normal2):
+                    split_edges.add(edge)
         for edge in all_face_boundary_edges:
             if edge in split_edges:
                 edge.smooth = False
