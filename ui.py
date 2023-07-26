@@ -120,6 +120,9 @@ class PlasticityPanel(bpy.types.Panel):
                 "wm.connect_button", text="Connect")
 
         if plasticity_client.connected:
+            if plasticity_client.filename:
+                layout.label(text="Filename: " + plasticity_client.filename)
+
             layout.separator()
 
             box = layout.box()

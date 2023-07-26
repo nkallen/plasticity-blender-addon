@@ -324,7 +324,13 @@ class SceneHandler:
         self.report({'INFO'}, "New version of " +
                     filename + " available: " + str(version))
 
-    def clear(self):
+    def new_file(self, filename):
+        self.report({'INFO'}, "New file available: " + filename)
+
+    def on_connect(self):
+        self.files = {}
+
+    def on_disconnect(self):
         self.files = {}
 
     def report(self, level, message):

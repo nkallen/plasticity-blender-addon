@@ -53,6 +53,7 @@ class PlasticityClient:
     def __init__(self, handler):
         self.connected = False
         self.subscribed = False
+        self.filename = None
         self.websocket = None
         self.message_id = 0
         self.handler = handler
@@ -218,6 +219,7 @@ class PlasticityClient:
                 self.websocket = weakref.proxy(ws)
                 self.connected = True
                 self.message_id = 0
+                self.handler.on_connect()
 
                 while True:
                     try:
@@ -232,7 +234,9 @@ class PlasticityClient:
                             {'INFO'}, f"Disconnected from server: {e}")
                         self.connected = False
                         self.websocket = None
-                        self.handler.clear()
+                        self.filename = None
+                        self.subscribed = False
+                        self.handler.on_disconnect()
                         break
                     except Exception as e:
                         self.report({'ERROR'}, f"Exception: {e}")
@@ -240,6 +244,9 @@ class PlasticityClient:
             self.report({'INFO'}, "Disconnected from server")
             self.connected = False
             self.websocket = None
+            self.filename = None
+            self.subscribed = False
+            self.handler.on_disconnect()
         except InvalidURI:
             self.report(
                 {'ERROR'}, "Invalid URI for the WebSocket server")
@@ -269,10 +276,37 @@ class PlasticityClient:
             self.__on_transaction(view, offset)
 
         elif message_type == MessageType.NEW_VERSION_1:
-            version = int.from_bytes(view[offset:offset + 4], 'little')
+            filename_length = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
 
-            bpy.app.timers.register(lambda: self.handler.new_version(
-                version), first_interval=0.001)
+            filename = view[offset:offset +
+                            filename_length].tobytes().decode('utf-8')
+            offset += filename_length
+
+            self.filename = filename
+
+            # Add string padding for byte alignment
+            padding = (4 - (filename_length % 4)) % 4
+            offset += padding
+
+            version = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
+
+            bpy.app.timers.register(
+                lambda: self.handler.new_version(filename, version), first_interval=0.001)
+
+        elif message_type == MessageType.NEW_FILE_1:
+            filename_length = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
+
+            filename = view[offset:offset +
+                            filename_length].tobytes().decode('utf-8')
+            offset += filename_length
+
+            self.filename = filename
+
+            bpy.app.timers.register(
+                lambda: self.handler.new_file(filename), first_interval=0.001)
 
         elif message_type == MessageType.REFACET_SOME_1:
             self.__on_refacet(view, offset)
@@ -284,6 +318,8 @@ class PlasticityClient:
         filename = view[offset:offset +
                         filename_length].tobytes().decode('utf-8')
         offset += filename_length
+
+        self.filename = filename
 
         # Add string padding for byte alignment
         padding = (4 - (filename_length % 4)) % 4
@@ -323,6 +359,8 @@ class PlasticityClient:
         filename = view[offset:offset +
                         filename_length].tobytes().decode('utf-8')
         offset += filename_length
+
+        self.filename = filename
 
         # Add string padding for byte alignment
         padding = (4 - (filename_length % 4)) % 4
@@ -445,8 +483,10 @@ class PlasticityClient:
             del self.websocket
 
         self.connected = False
-        self.handler.clear()
+        self.filename = None
+        self.subscribed = False
         self.websocket = None
+        self.handler.on_disconnect()
         self.report({'INFO'}, "Disconnected from Plasticity server")
         return {'FINISHED'}
 
