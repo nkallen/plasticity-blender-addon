@@ -92,11 +92,18 @@ class RefacetButton(bpy.types.Operator):
         prop_tolerance = context.scene.prop_plasticity_facet_tolerance
         prop_angle = context.scene.prop_plasticity_facet_angle
         prop_max_sides = 3 if context.scene.prop_plasticity_facet_tri_or_ngon == "TRI" else 128
-        plasticity_ids = [obj["plasticity_id"]
-                          for obj in context.selected_objects if "plasticity_id" in obj.keys()]
 
-        plasticity_client.refacet_some(plasticity_ids, curve_chord_tolerance=prop_tolerance,
-                                       surface_plane_tolerance=prop_tolerance, curve_chord_angle=prop_angle, surface_plane_angle=prop_angle, max_sides=prop_max_sides)
+        plasticity_ids_by_filename = {}
+        for obj in context.selected_objects:
+            if "plasticity_filename" in obj.keys():
+                if obj["plasticity_filename"] not in plasticity_ids_by_filename.keys():
+                    plasticity_ids_by_filename[obj["plasticity_filename"]] = []
+                plasticity_ids_by_filename[obj["plasticity_filename"]].append(
+                    obj["plasticity_id"])
+
+        for filename, plasticity_ids in plasticity_ids_by_filename.items():
+            plasticity_client.refacet_some(filename, plasticity_ids, curve_chord_tolerance=prop_tolerance,
+                                           surface_plane_tolerance=prop_tolerance, curve_chord_angle=prop_angle, surface_plane_angle=prop_angle, max_sides=prop_max_sides)
 
         return {'FINISHED'}
 

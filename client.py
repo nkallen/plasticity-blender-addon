@@ -129,15 +129,15 @@ class PlasticityClient:
             "<I", self.message_id)
         await self.websocket.send(subscribe_message)
 
-    def subscribe_some(self, plasticity_ids):
+    def subscribe_some(self, filename, plasticity_ids):
         if self.connected:
             self.report({'INFO'}, "Subscribing to meshes...")
 
             future = run_coroutine_threadsafe(
-                self.subscribe_some_async(plasticity_ids), self.loop)
+                self.subscribe_some_async(filename, plasticity_ids), self.loop)
             future.result()
 
-    async def subscribe_some_async(self, plasticity_ids):
+    async def subscribe_some_async(self, filename, plasticity_ids):
         if len(plasticity_ids) == 0:
             return
 
@@ -148,30 +148,46 @@ class PlasticityClient:
         subscribe_message += struct.pack(
             "<I", self.message_id)
         subscribe_message += struct.pack(
+            "<I", len(filename))
+        subscribe_message += struct.pack(
+            f"<{len(filename)}s", filename.encode('utf-8'))
+        padding = (4 - (len(filename) % 4)) % 4
+        subscribe_message += struct.pack(
+            f"<{padding}x")
+        subscribe_message += struct.pack(
             "<I", len(plasticity_ids))
         for plasticity_id in plasticity_ids:
             subscribe_message += struct.pack(
                 "<I", plasticity_id)
         await self.websocket.send(subscribe_message)
 
-    def refacet_some(self, plasticity_ids, relative_to_bbox=True, curve_chord_tolerance=0.01, curve_chord_angle=0.35, surface_plane_tolerance=0.01, surface_plane_angle=0.35, match_topology=True, max_sides=3, min_width=0, max_width=0, curve_chord_max=0, shape=FacetShapeType.CUT):
+    def refacet_some(self, filename, plasticity_ids, relative_to_bbox=True, curve_chord_tolerance=0.01, curve_chord_angle=0.35, surface_plane_tolerance=0.01, surface_plane_angle=0.35, match_topology=True, max_sides=3, min_width=0, max_width=0, curve_chord_max=0, shape=FacetShapeType.CUT):
         if self.connected:
             self.report({'INFO'}, "Refaceting meshes...")
 
             future = run_coroutine_threadsafe(
-                self.refacet_some_async(plasticity_ids, relative_to_bbox, curve_chord_tolerance, curve_chord_angle, surface_plane_tolerance, surface_plane_angle, match_topology, max_sides, min_width, max_width, curve_chord_max, shape), self.loop)
+                self.refacet_some_async(filename, plasticity_ids, relative_to_bbox, curve_chord_tolerance, curve_chord_angle, surface_plane_tolerance, surface_plane_angle, match_topology, max_sides, min_width, max_width, curve_chord_max, shape), self.loop)
             future.result()
 
-    async def refacet_some_async(self, plasticity_ids, relative_to_bbox=True, curve_chord_tolerance=0.01, curve_chord_angle=0.35, surface_plane_tolerance=0.01, surface_plane_angle=0.35, match_topology=True, max_sides=3, min_width=0, max_width=0, curve_chord_max=0, shape=FacetShapeType.CUT):
+    async def refacet_some_async(self, filename, plasticity_ids, relative_to_bbox=True, curve_chord_tolerance=0.01, curve_chord_angle=0.35, surface_plane_tolerance=0.01, surface_plane_angle=0.35, match_topology=True, max_sides=3, min_width=0, max_width=0, curve_chord_max=0, shape=FacetShapeType.CUT):
         if len(plasticity_ids) == 0:
             return
 
         self.message_id += 1
 
+        print (f"Refacetting {filename} with {plasticity_ids}")
+
         refacet_message = struct.pack(
             "<I", MessageType.REFACET_SOME_1.value)
         refacet_message += struct.pack(
             "<I", self.message_id)
+        refacet_message += struct.pack(
+            "<I", len(filename))
+        refacet_message += struct.pack(
+            f"<{len(filename)}s", filename.encode('utf-8'))
+        padding = (4 - (len(filename) % 4)) % 4
+        refacet_message += struct.pack(
+            f"<{padding}x")
         refacet_message += struct.pack(
             "<I", len(plasticity_ids))
         for plasticity_id in plasticity_ids:
@@ -269,9 +285,16 @@ class PlasticityClient:
         if message_type == MessageType.TRANSACTION_1:
             self.__on_transaction(view, offset)
 
-        elif message_type == MessageType.LIST_ALL_1:
+        elif message_type == MessageType.LIST_ALL_1 or message_type == MessageType.LIST_SOME_1 or message_type == MessageType.LIST_VISIBLE_1:
             message_id = int.from_bytes(view[offset:offset + 4], 'little')
             offset += 4
+
+            code = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
+
+            if code != 200:
+                self.report({'ERROR'}, f"List all failed with code: {code}")
+                return
 
             self.__on_transaction(view, offset)
 
@@ -352,6 +375,13 @@ class PlasticityClient:
     def __on_refacet(self, view, offset):
         message_id = int.from_bytes(view[offset:offset + 4], 'little')
         offset += 4
+
+        code = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        if code != 200:
+            self.report({'ERROR'}, f"Refacet failed with code: {code}")
+            return
 
         filename_length = int.from_bytes(view[offset:offset + 4], 'little')
         offset += 4
