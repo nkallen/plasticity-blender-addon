@@ -10,6 +10,10 @@ class SelectByFaceIDOperator(bpy.types.Operator):
     bl_label = "Select by Plasticity Face ID"
     bl_options = {'REGISTER', 'UNDO'}
 
+    @classmethod
+    def poll(cls, context):
+        return any("plasticity_id" in obj.keys() and obj.type == 'MESH' for obj in context.selected_objects)
+
     def execute(self, context):
         obj = context.object
         bpy.ops.object.mode_set(mode='EDIT')
@@ -62,30 +66,35 @@ class MarkSharpEdgesForPlasticityGroupsWithSplitNormalsOperator(bpy.types.Operat
 
     @classmethod
     def poll(cls, context):
-        obj = context.object
-        return obj is not None and obj.type == 'MESH' and "plasticity_id" in obj.keys()
+        return any("plasticity_id" in obj.keys() and obj.type == 'MESH' for obj in context.selected_objects)
 
     def execute(self, context):
-        obj = context.object
-        mesh = obj.data
+        prev_obj_mode = bpy.context.mode
 
-        prev_obj_mode = bpy.context.object.mode
-        bpy.context.view_layer.objects.active = obj
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.remove_doubles(threshold=1e-06)
-        bpy.ops.object.mode_set(mode='OBJECT')
+        for obj in context.selected_objects:
+            if obj.type != 'MESH':
+                continue
+            if not "plasticity_id" in obj.keys():
+                continue
+            mesh = obj.data
 
-        if "plasticity_id" not in obj.keys():
-            self.report(
-                {'ERROR'}, "Object doesn't have a plasticity_id attribute.")
-            return {'CANCELLED'}
+            prev_obj_mode = bpy.context.object.mode
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='SELECT')
+            bpy.ops.mesh.remove_doubles(threshold=1e-06)
+            bpy.ops.object.mode_set(mode='OBJECT')
 
-        groups = mesh["groups"]
+            if "plasticity_id" not in obj.keys():
+                self.report(
+                    {'ERROR'}, "Object doesn't have a plasticity_id attribute.")
+                return {'CANCELLED'}
 
-        self.mark_sharp_edges(obj, groups)
+            groups = mesh["groups"]
 
-        bpy.ops.object.mode_set(mode=prev_obj_mode)
+            self.mark_sharp_edges(obj, groups)
+
+        bpy.ops.object.mode_set(mode=map_mode(prev_obj_mode))
 
         return {'FINISHED'}
 
@@ -131,30 +140,34 @@ class MarkSharpEdgesForPlasticityGroupsOperator(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        obj = context.object
-        return obj is not None and obj.type == 'MESH' and "plasticity_id" in obj.keys()
+        return any("plasticity_id" in obj.keys() and obj.type == 'MESH' for obj in context.selected_objects)
 
     def execute(self, context):
-        obj = context.object
-        mesh = obj.data
-
         prev_obj_mode = bpy.context.object.mode
-        bpy.context.view_layer.objects.active = obj
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.remove_doubles(threshold=1e-06)
-        bpy.ops.object.mode_set(mode='OBJECT')
 
-        if "plasticity_id" not in obj.keys():
-            self.report(
-                {'ERROR'}, "Object doesn't have a plasticity_id attribute.")
-            return {'CANCELLED'}
+        for obj in context.selected_objects:
+            if obj.type != 'MESH':
+                continue
+            if not "plasticity_id" in obj.keys():
+                continue
+            mesh = obj.data
 
-        groups = mesh["groups"]
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='SELECT')
+            bpy.ops.mesh.remove_doubles(threshold=1e-06)
+            bpy.ops.object.mode_set(mode='OBJECT')
 
-        self.mark_sharp_edges(obj, groups)
+            if "plasticity_id" not in obj.keys():
+                self.report(
+                    {'ERROR'}, "Object doesn't have a plasticity_id attribute.")
+                return {'CANCELLED'}
 
-        bpy.ops.object.mode_set(mode=prev_obj_mode)
+            groups = mesh["groups"]
+
+            self.mark_sharp_edges(obj, groups)
+
+        bpy.ops.object.mode_set(mode=map_mode(prev_obj_mode))
 
         return {'FINISHED'}
 
@@ -194,7 +207,6 @@ def face_boundary_edges(groups, mesh, bm):
 
         face = bm.faces[poly.index]
         for edge in face.edges:
-            verts = (edge.verts[0].index, edge.verts[1].index)
             if edge in face_boundary_edges:
                 face_boundary_edges.remove(edge)
             else:
@@ -211,24 +223,52 @@ class PaintPlasticityFacesOperator(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return any("plasticity_id" in obj.keys() for obj in context.selected_objects)
+        return any("plasticity_id" in obj.keys() and obj.type == 'MESH' for obj in context.selected_objects)
 
     def execute(self, context):
-        prev_obj_mode = bpy.context.object.mode
-        if prev_obj_mode != 'OBJECT':
+        prev_obj_mode = bpy.context.mode
+
+        for obj in context.selected_objects:
+            if obj.type != 'MESH':
+                continue
+            if not "plasticity_id" in obj.keys():
+                continue
+            mesh = obj.data
+
+            if "plasticity_id" not in obj.keys():
+                self.report(
+                    {'ERROR'}, "Object doesn't have a plasticity_id attribute.")
+                return {'CANCELLED'}
+
+            bpy.context.view_layer.objects.active = obj
             bpy.ops.object.mode_set(mode='OBJECT')
 
-        obj = context.object
-        mesh = obj.data
+            self.colorize_mesh(obj, mesh)
 
-        if "plasticity_id" not in obj.keys():
-            self.report(
-                {'ERROR'}, "Object doesn't have a plasticity_id attribute.")
-            return {'CANCELLED'}
+            mat = bpy.data.materials.new(name="VertexColorMat")
+            mat.use_nodes = True
+            nodes = mat.node_tree.nodes
 
-        self.colorize_mesh(obj, mesh)
+            for node in nodes:
+                nodes.remove(node)
 
-        bpy.ops.object.mode_set(mode=prev_obj_mode)
+            vertex_color_node = nodes.new(type='ShaderNodeVertexColor')
+            shader_node = nodes.new(type='ShaderNodeBsdfPrincipled')
+            shader_node.location = (400, 0)
+            mat.node_tree.links.new(
+                shader_node.inputs['Base Color'], vertex_color_node.outputs['Color'])
+
+            material_output = nodes.new(type='ShaderNodeOutputMaterial')
+            material_output.location = (800, 0)
+            mat.node_tree.links.new(
+                material_output.inputs['Surface'], shader_node.outputs['BSDF'])
+
+            if obj.data.materials:
+                obj.data.materials[0] = mat
+            else:
+                obj.data.materials.append(mat)
+
+        bpy.ops.object.mode_set(mode=map_mode(prev_obj_mode))
 
         return {'FINISHED'}
 
@@ -245,17 +285,22 @@ class PaintPlasticityFacesOperator(bpy.types.Operator):
             mesh.vertex_colors.new()
         color_layer = mesh.vertex_colors.active
 
-        for i in range(0, len(groups), 2):
-            start_offset = groups[i + 0]
-            count = groups[i + 1]
-            face_id = face_ids[i // 2]
+        group_idx = 0
+        group_start = groups[group_idx * 2 + 0]
+        group_count = groups[group_idx * 2 + 1]
+        face_id = face_ids[group_idx]
+        color = generate_random_color(face_id)
 
-            color = generate_random_color(face_id)
-
-            for j in range(start_offset // 3, (start_offset + count) // 3):
-                face = mesh.polygons[j]
-                for loop_index in face.loop_indices:
-                    color_layer.data[loop_index].color = color
+        for poly in mesh.polygons:
+            loop_start = poly.loop_start
+            if loop_start >= group_start + group_count:
+                group_idx += 1
+                group_start = groups[group_idx * 2 + 0]
+                group_count = groups[group_idx * 2 + 1]
+                face_id = face_ids[group_idx]
+                color = generate_random_color(face_id)
+            for loop_index in range(loop_start, loop_start + poly.loop_total):
+                color_layer.data[loop_index].color = color
 
 
 def are_normals_different(normal_a, normal_b, threshold_angle_degrees=5.0):
@@ -266,3 +311,19 @@ def are_normals_different(normal_a, normal_b, threshold_angle_degrees=5.0):
 
 def generate_random_color(face_id):
     return (random.random(), random.random(), random.random(), 1.0)  # RGBA
+
+
+mode_map = {
+    'EDIT_MESH': 'EDIT',
+    'EDIT_CURVE': 'EDIT',
+    'EDIT_SURFACE': 'EDIT',
+    'EDIT_TEXT': 'EDIT',
+    'EDIT_ARMATURE': 'EDIT',
+    'EDIT_METABALL': 'EDIT',
+    'EDIT_LATTICE': 'EDIT',
+    'POSE': 'EDIT',
+}
+
+
+def map_mode(context_mode):
+    return mode_map.get(context_mode, context_mode)
