@@ -187,7 +187,7 @@ class SceneHandler:
                         group_collection.name = name
 
                     if group_collection:
-                        group_collection.hide_viewport = not is_hidden or not is_visible
+                        group_collection.hide_viewport = is_hidden or not is_visible
                         group_collection.hide_select = not is_selectable
 
         for item in objects:
@@ -205,8 +205,10 @@ class SceneHandler:
                         plasticity_id)
                     if obj:
                         if object_type == ObjectType.GROUP.value:
+                            inbox_collection.children.unlink(obj)
                             parent.children.link(obj)
                         else:
+                            inbox_collection.objects.unlink(obj)
                             parent.objects.link(obj)
 
     def __inbox_for_filename(self, filename):
