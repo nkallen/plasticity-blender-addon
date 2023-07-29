@@ -85,16 +85,23 @@ class SceneHandler:
         mesh = obj.data
         mesh.clear_geometry()
 
-        mesh.vertices.add(len(verts) // 3)
-        mesh.vertices.foreach_set("co", verts)
+        verts_array = np.array(verts).reshape(-1, 3)
+        unique_verts, inverse_indices = np.unique(
+            verts_array, axis=0, return_inverse=True)
+        new_indices = inverse_indices[indices]
+
+        mesh.vertices.add(len(unique_verts))
+        mesh.vertices.foreach_set("co", unique_verts.ravel())
 
         mesh.loops.add(len(indices))
-        mesh.loops.foreach_set("vertex_index", indices)
+        mesh.loops.foreach_set("vertex_index", new_indices)
 
         if (len(faces) == 0):
-            mesh.polygons.add(len(indices) // 3)
-            mesh.polygons.foreach_set("loop_start", range(0, len(indices), 3))
-            mesh.polygons.foreach_set("loop_total", [3] * (len(indices) // 3))
+            mesh.polygons.add(len(new_indices) // 3)
+            mesh.polygons.foreach_set(
+                "loop_start", range(0, len(new_indices), 3))
+            mesh.polygons.foreach_set(
+                "loop_total", [3] * (len(new_indices) // 3))
         else:
             # Find where a new face/polygon starts (value changes in the array)
             diffs = np.where(np.diff(faces))[0] + 1
@@ -112,16 +119,10 @@ class SceneHandler:
 
         mesh.update()
 
+        mesh.use_auto_smooth = True
         denormalized_normals = np.zeros((len(indices), 3), dtype=np.float32)
         denormalized_normals = normals.reshape(-1, 3)[indices]
         mesh.normals_split_custom_set(denormalized_normals)
-
-        # NOTE: Plasticity currently doesn't merge doubles via this API
-        bpy.context.view_layer.objects.active = obj
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.remove_doubles(threshold=1e-06)
-        bpy.ops.object.mode_set(mode='OBJECT')
 
     def __add_object(self, to_collection, filename, object_type, plasticity_id, name, mesh):
         mesh_obj = bpy.data.objects.new(name, mesh)
@@ -290,9 +291,12 @@ class SceneHandler:
             self.__replace(filename, inbox_collection,
                            version, transaction["update"])
 
+        bpy.ops.ed.undo_push(message="/Plasticity update")
+
     def refacet(self, filename, version, plasticity_ids, versions, faces, positions, indices, normals, groups, face_ids):
         self.report({'INFO'}, "Refaceting " + filename +
                     " to version " + str(version))
+        bpy.ops.ed.undo_push(message="Plasticity refacet")
 
         self.__prepare(filename)
 
@@ -316,11 +320,12 @@ class SceneHandler:
                 self.__update_mesh(
                     obj, version, face, position, index, normal, group, face_id)
 
-        bpy.ops.ed.undo_push(message="Plasticity refacet")
         bpy.context.view_layer.objects.active = prev_active_object
         for obj in prev_selected_objects:
             obj.select_set(True)
         bpy.ops.object.mode_set(mode=prev_obj_mode)
+
+        bpy.ops.ed.undo_push(message="/Plasticity refacet")
 
     def new_version(self, filename, version):
         self.report({'INFO'}, "New version of " +
