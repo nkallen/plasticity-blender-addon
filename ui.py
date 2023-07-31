@@ -1,4 +1,5 @@
 import bpy
+import math
 
 from .__init__ import plasticity_client
 
@@ -92,6 +93,20 @@ class RefacetButton(bpy.types.Operator):
         prop_tolerance = context.scene.prop_plasticity_facet_tolerance
         prop_angle = context.scene.prop_plasticity_facet_angle
         prop_max_sides = 3 if context.scene.prop_plasticity_facet_tri_or_ngon == "TRI" else 128
+        prop_plane_angle = math.pi / 4.0 if (prop_max_sides > 4) else 0
+
+        prop_min_width = 0
+        prop_max_width = 0
+        curve_chord_max = 0
+        if context.scene.prop_plasticity_ui_show_advanced_facet:
+            prop_min_width = context.scene.prop_plasticity_facet_min_width
+            prop_max_width = context.scene.prop_plasticity_facet_max_width
+            if prop_max_width < prop_min_width:
+                prop_max_width = prop_min_width
+            # NOTE: it is possible the user wants to do this but this will almost certain overwhelm the server and blender!
+            if 0 < prop_max_width < 0.02:
+                prop_max_width = 0.02
+            curve_chord_max = prop_max_width * math.sqrt(0.5)
 
         plasticity_ids_by_filename = {}
         for obj in context.selected_objects:
@@ -102,8 +117,8 @@ class RefacetButton(bpy.types.Operator):
                     obj["plasticity_id"])
 
         for filename, plasticity_ids in plasticity_ids_by_filename.items():
-            plasticity_client.refacet_some(filename, plasticity_ids, curve_chord_tolerance=prop_tolerance,
-                                           surface_plane_tolerance=prop_tolerance, curve_chord_angle=prop_angle, surface_plane_angle=prop_angle, max_sides=prop_max_sides)
+            plasticity_client.refacet_some(filename, plasticity_ids, curve_chord_tolerance=prop_tolerance, min_width=prop_min_width, max_width=prop_max_width,
+                                           surface_plane_tolerance=prop_tolerance, curve_chord_angle=prop_angle, surface_plane_angle=prop_angle, max_sides=prop_max_sides, plane_angle=prop_plane_angle, curve_chord_max=curve_chord_max)
 
         return {'FINISHED'}
 
@@ -145,14 +160,21 @@ class PlasticityPanel(bpy.types.Panel):
             layout.separator()
 
             box = layout.box()
+            refacet_op = box.operator("wm.refacet", text="Refacet")
             box.label(text="Refacet config:")
 
             box.prop(scene, "prop_plasticity_facet_tri_or_ngon",
                      text="Tri or Ngon", expand=True)
             box.prop(scene, "prop_plasticity_facet_tolerance", text="Tolerance")
             box.prop(scene, "prop_plasticity_facet_angle", text="Angle")
-            refacet_op = box.operator("wm.refacet", text="Refacet")
 
+            box.prop(context.scene, "prop_plasticity_ui_show_advanced_facet",
+                     icon="TRIA_DOWN" if context.scene.prop_plasticity_ui_show_advanced_facet else "TRIA_RIGHT")
+            if context.scene.prop_plasticity_ui_show_advanced_facet:
+                box.prop(scene, "prop_plasticity_facet_min_width",
+                         text="Min width")
+                box.prop(scene, "prop_plasticity_facet_max_width",
+                         text="Max width")
             layout.separator()
 
             box = layout.box()

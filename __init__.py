@@ -64,6 +64,12 @@ def register():
         name="Facet Type",
         default="TRI",
     )
+    bpy.types.Scene.prop_plasticity_ui_show_advanced_facet = bpy.props.BoolProperty(
+        name="Advanced", default=False)
+    bpy.types.Scene.prop_plasticity_facet_min_width = bpy.props.FloatProperty(
+        name="Min Width", default=0.0, min=0)
+    bpy.types.Scene.prop_plasticity_facet_max_width = bpy.props.FloatProperty(
+        name="Max Width", default=0.0, min=0)
 
     print("Plasticity client registered")
 
@@ -92,6 +98,9 @@ def unregister():
     del bpy.types.Scene.prop_plasticity_facet_angle
     del bpy.types.Scene.prop_plasticity_facet_tri_or_ngon
     del bpy.types.Scene.prop_plasticity_list_only_visible
+    del bpy.types.Scene.prop_plasticity_ui_show_advanced_facet
+    del bpy.types.Scene.prop_plasticity_facet_min_width
+    del bpy.types.Scene.prop_plasticity_facet_max_width
 
 
 if __name__ == "__main__":
