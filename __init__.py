@@ -50,6 +50,8 @@ def register():
     bpy.types.VIEW3D_MT_object_context_menu.append(right_click_menu)
     bpy.types.VIEW3D_MT_edit_mesh_select_similar.append(select_similar)
 
+    bpy.types.Scene.prop_plasticity_server = bpy.props.StringProperty(
+        name="Server", default="localhost:8080")
     bpy.types.Scene.prop_plasticity_facet_tolerance = bpy.props.FloatProperty(
         name="Tolerance", default=0.01, min=0.0001, max=1.0)
     bpy.types.Scene.prop_plasticity_facet_angle = bpy.props.FloatProperty(
@@ -67,9 +69,11 @@ def register():
     bpy.types.Scene.prop_plasticity_ui_show_advanced_facet = bpy.props.BoolProperty(
         name="Advanced", default=False)
     bpy.types.Scene.prop_plasticity_facet_min_width = bpy.props.FloatProperty(
-        name="Min Width", default=0.0, min=0)
+        name="Min Width", default=0.0, min=0, unit="LENGTH")
     bpy.types.Scene.prop_plasticity_facet_max_width = bpy.props.FloatProperty(
-        name="Max Width", default=0.0, min=0)
+        name="Max Width", default=0.0, min=0, unit="LENGTH")
+    bpy.types.Scene.prop_plasticity_unit_scale = bpy.props.FloatProperty(
+        name="Unit Scale", default=1.0, min=0.0001, max=1000.0)
 
     print("Plasticity client registered")
 
@@ -94,6 +98,7 @@ def unregister():
     bpy.types.VIEW3D_MT_object_context_menu.remove(right_click_menu)
     bpy.types.VIEW3D_MT_edit_mesh_select_similar.remove(select_similar)
 
+    del bpy.types.Scene.prop_plasticity_server
     del bpy.types.Scene.prop_plasticity_facet_tolerance
     del bpy.types.Scene.prop_plasticity_facet_angle
     del bpy.types.Scene.prop_plasticity_facet_tri_or_ngon
@@ -101,6 +106,7 @@ def unregister():
     del bpy.types.Scene.prop_plasticity_ui_show_advanced_facet
     del bpy.types.Scene.prop_plasticity_facet_min_width
     del bpy.types.Scene.prop_plasticity_facet_max_width
+    del bpy.types.Scene.prop_plasticity_unit_scale
 
 
 if __name__ == "__main__":

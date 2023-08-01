@@ -51,6 +51,7 @@ class FacetShapeType(Enum):
 
 class PlasticityClient:
     def __init__(self, handler):
+        self.server = None
         self.connected = False
         self.subscribed = False
         self.filename = None
@@ -218,23 +219,22 @@ class PlasticityClient:
 
         await self.websocket.send(refacet_message)
 
-    def connect(self):
-        self.report({'INFO'}, "Starting WebSocket client...")
-
+    def connect(self, server):
         loop = self.loop
         websocket_thread = threading.Thread(
-            target=loop.run_until_complete, args=(loop.create_task(self.connect_async()),))
+            target=loop.run_until_complete, args=(loop.create_task(self.connect_async(server)),))
         websocket_thread.daemon = True
         websocket_thread.start()
 
-    async def connect_async(self):
-        self.report({'INFO'}, "Connecting to server")
+    async def connect_async(self, server):
+        self.report({'INFO'}, "Connecting to server: " + server)
         try:
-            async with client.connect("ws://localhost:8080", max_size=max_size) as ws:
+            async with client.connect("ws://" + server, max_size=max_size) as ws:
                 self.report({'INFO'}, "Connected to server")
                 self.websocket = weakref.proxy(ws)
                 self.connected = True
                 self.message_id = 0
+                self.server = server
                 self.handler.on_connect()
 
                 while True:

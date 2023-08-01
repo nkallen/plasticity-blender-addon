@@ -14,7 +14,8 @@ class ConnectButton(bpy.types.Operator):
         return not plasticity_client.connected
 
     def execute(self, context):
-        plasticity_client.connect()
+        server = context.scene.prop_plasticity_server
+        plasticity_client.connect(server)
         return {'FINISHED'}
 
 
@@ -137,9 +138,12 @@ class PlasticityPanel(bpy.types.Panel):
         if plasticity_client.connected:
             disconnect_button = layout.operator(
                 "wm.disconnect_button", text="Disconnect")
+            layout.label(text="Connected to " + plasticity_client.server)
         else:
-            connect_button = layout.operator(
+            box = layout.box()
+            connect_button = box.operator(
                 "wm.connect_button", text="Connect")
+            box.prop(scene, "prop_plasticity_server", text="Server")
 
         if plasticity_client.connected:
             if plasticity_client.filename:
@@ -151,6 +155,8 @@ class PlasticityPanel(bpy.types.Panel):
             box.prop(scene, "prop_plasticity_list_only_visible",
                      text="Only visible")
             box.operator("wm.list", text="Refresh")
+            box.prop(scene, "prop_plasticity_unit_scale",
+                     text="Scale", description="Scale the mesh (ON INITIAL IMPORT ONLY!)", slider=True)
 
             layout.separator()
             if not plasticity_client.subscribed:

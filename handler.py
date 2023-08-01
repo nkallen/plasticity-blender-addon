@@ -82,6 +82,11 @@ class SceneHandler:
         if obj.mode == 'EDIT':
             bpy.ops.object.mode_set(mode='OBJECT')
 
+        scene = bpy.context.scene
+        prop_plasticity_unit_scale = scene.prop_plasticity_unit_scale
+        obj.scale = (prop_plasticity_unit_scale,
+                     prop_plasticity_unit_scale, prop_plasticity_unit_scale)
+
         mesh = obj.data
         mesh.clear_geometry()
 
@@ -139,6 +144,9 @@ class SceneHandler:
             bpy.data.objects.remove(obj, do_unlink=True)
 
     def __replace(self, filename, inbox_collection, version, objects):
+        scene = bpy.context.scene
+        prop_plasticity_unit_scale = scene.prop_plasticity_unit_scale
+
         for item in objects:
             object_type = item['type']
             name = item['name']
@@ -162,6 +170,8 @@ class SceneHandler:
                         name, verts, faces, normals, groups, face_ids)
                     obj = self.__add_object(inbox_collection, filename, object_type,
                                             plasticity_id, name, mesh)
+                    obj.scale = (prop_plasticity_unit_scale,
+                                 prop_plasticity_unit_scale, prop_plasticity_unit_scale)
                 else:
                     obj = self.files[filename][PlasticityIdUniquenessScope.ITEM].get(
                         plasticity_id)
