@@ -26,36 +26,39 @@ class SelectByFaceIDOperator(bpy.types.Operator):
             self.report({'ERROR'}, "No groups found")
             return {'CANCELLED'}
 
+        face_ids = mesh["face_ids"]
+        if not face_ids:
+            self.report({'ERROR'}, "No face_ids found")
+            return {'CANCELLED'}
+
         active_face = bm.faces.active
         if not active_face:
             self.report({'ERROR'}, "No active face selected")
             return {'CANCELLED'}
 
-        face_id = active_face.index
+        loop_idx = active_face.loops[0].index
 
-        target_group_index = None
-        for idx in range(0, len(groups), 2):
-            start_idx = groups[idx + 0] // 3
-            count = groups[idx + 1] // 3
-            if face_id >= start_idx and face_id < (start_idx + count):
-                target_group_index = idx
+        group_id = -1
+        for i in range(0, len(groups), 2):
+            group_start = groups[i + 0]
+            group_count = groups[i + 1]
+            if loop_idx >= group_start and loop_idx < group_start + group_count:
+                group_id = i
                 break
 
-        if target_group_index is None:
+        if group_id == -1:
             self.report({'ERROR'}, "No group found for face")
             return {'CANCELLED'}
 
-        target_group = groups[target_group_index + 0]
-        target_group_count = groups[target_group_index + 1]
-        target_group_start = target_group // 3
-        target_group_end = target_group_start + (target_group_count // 3)
+        group_start = groups[group_id + 0]
+        group_count = groups[group_id + 1]
 
-        for face_idx in range(target_group_start, target_group_end):
-            face = bm.faces[face_idx]
-            face.select = True
+        for face in bm.faces:
+            loop_start = face.loops[0].index
+            if loop_start >= group_start and loop_start < group_start + group_count:
+                face.select = True
 
-        bmesh.update_edit_mesh(obj.data)
-
+        bmesh.update_edit_mesh(mesh)
         return {'FINISHED'}
 
 
