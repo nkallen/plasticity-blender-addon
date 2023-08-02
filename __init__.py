@@ -23,11 +23,7 @@ def select_similar(self, context):
 
 
 def right_click_menu(self, context):
-    self.layout.operator(
-        operators.MarkSharpEdgesForPlasticityGroupsWithSplitNormalsOperator.bl_idname)
-    self.layout.operator(
-        operators.MarkSharpEdgesForPlasticityGroupsOperator.bl_idname)
-    self.layout.operator(operators.PaintPlasticityFacesOperator.bl_idname)
+    self.layout.separator()
     self.layout.operator(
         operators.SetPlasticityOriginToOriginOperator.bl_idname)
 
