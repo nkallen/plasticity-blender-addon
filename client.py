@@ -489,8 +489,10 @@ class PlasticityClient:
         self.report({'INFO'}, f"Message type: {message_type}")
 
         if message_type == MessageType.DELETE_1:
+            num_objects = int.from_bytes(view[:4], 'little')
+            offset += 4
             transaction["delete"].extend(
-                np.frombuffer(view[4:], dtype=np.int32))
+                np.frombuffer(view[offset:offset + num_objects * 4], dtype=np.int32))
         elif message_type == MessageType.ADD_1:
             transaction["add"].extend(decode_objects(view[4:]))
         elif message_type == MessageType.UPDATE_1:
