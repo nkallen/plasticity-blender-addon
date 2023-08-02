@@ -156,7 +156,7 @@ class PlasticityPanel(bpy.types.Panel):
                      text="Only visible")
             box.operator("wm.list", text="Refresh")
             box.prop(scene, "prop_plasticity_unit_scale",
-                     text="Scale", description="Scale the mesh (ON INITIAL IMPORT ONLY!)", slider=True)
+                     text="Scale", slider=True)
 
             layout.separator()
             if not plasticity_client.subscribed:
