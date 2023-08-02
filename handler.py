@@ -3,6 +3,7 @@ from enum import Enum
 
 import bpy
 import numpy as np
+import mathutils
 
 
 class PlasticityIdUniquenessScope(Enum):
@@ -78,6 +79,8 @@ class SceneHandler:
         denormalized_normals = normals.reshape(-1, 3)[indices]
         mesh.normals_split_custom_set(denormalized_normals)
 
+        self.update_pivot(obj)
+
     def __update_mesh_ngons(self, obj, version, faces, verts, indices, normals, groups, face_ids):
         if obj.mode == 'EDIT':
             bpy.ops.object.mode_set(mode='OBJECT')
@@ -123,6 +126,22 @@ class SceneHandler:
         denormalized_normals = np.zeros((len(indices), 3), dtype=np.float32)
         denormalized_normals = normals.reshape(-1, 3)[indices]
         mesh.normals_split_custom_set(denormalized_normals)
+
+        self.update_pivot(obj)
+
+    def update_pivot(self, obj):
+        if not "plasticity_transform" in obj:
+            return
+        transform_list = obj["plasticity_transform"]
+        if transform_list is not None:
+            bpy.ops.object.mode_set(mode='OBJECT')
+            old_matrix_world = obj.matrix_world.copy()
+            transform = np.array(transform_list).reshape(4, 4)
+            obj.matrix_world = mathutils.Matrix(transform)
+            obj.matrix_world.invert()
+            bpy.ops.object.transform_apply(
+                location=True, rotation=True, scale=True)
+            obj.matrix_world = old_matrix_world
 
     def __add_object(self, filename, object_type, plasticity_id, name, mesh):
         mesh_obj = bpy.data.objects.new(name, mesh)

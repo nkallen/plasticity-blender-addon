@@ -28,6 +28,8 @@ def right_click_menu(self, context):
     self.layout.operator(
         operators.MarkSharpEdgesForPlasticityGroupsOperator.bl_idname)
     self.layout.operator(operators.PaintPlasticityFacesOperator.bl_idname)
+    self.layout.operator(
+        operators.SetPlasticityOriginToOriginOperator.bl_idname)
 
 
 def register():
@@ -46,6 +48,7 @@ def register():
     bpy.utils.register_class(
         operators.MarkSharpEdgesForPlasticityGroupsOperator)
     bpy.utils.register_class(operators.PaintPlasticityFacesOperator)
+    bpy.utils.register_class(operators.SetPlasticityOriginToOriginOperator)
 
     bpy.types.VIEW3D_MT_object_context_menu.append(right_click_menu)
     bpy.types.VIEW3D_MT_edit_mesh_select_similar.append(select_similar)
@@ -94,6 +97,7 @@ def unregister():
     bpy.utils.unregister_class(
         operators.MarkSharpEdgesForPlasticityGroupsOperator)
     bpy.utils.unregister_class(operators.PaintPlasticityFacesOperator)
+    bpy.utils.unregister_class(operators.SetPlasticityOriginToOriginOperator)
 
     bpy.types.VIEW3D_MT_object_context_menu.remove(right_click_menu)
     bpy.types.VIEW3D_MT_edit_mesh_select_similar.remove(select_similar)

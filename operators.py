@@ -3,6 +3,7 @@ import random
 
 import bmesh
 import bpy
+import mathutils
 
 
 class SelectByFaceIDOperator(bpy.types.Operator):
@@ -64,7 +65,7 @@ class SelectByFaceIDOperator(bpy.types.Operator):
 
 class MarkSharpEdgesForPlasticityGroupsWithSplitNormalsOperator(bpy.types.Operator):
     bl_idname = "mesh.mark_sharp_edges_for_plasticity_with_split_normals"
-    bl_label = "Mark Sharp Edges for Plasticity Groups"
+    bl_label = "Mark Sharp Edges for Plasticity Groups With Split Normals"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -217,6 +218,39 @@ def face_boundary_edges(groups, mesh, bm):
     all_face_boundary_edges.update(face_boundary_edges)
 
     return all_face_boundary_edges
+
+
+class SetPlasticityOriginToOriginOperator(bpy.types.Operator):
+    bl_idname = "mesh.set_plasticity_origin_to_origin"
+    bl_label = "Set Plasticity Origin to Origin"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return any("plasticity_id" in obj.keys() and obj.type == 'MESH' for obj in context.selected_objects)
+
+    def execute(self, context):
+        prev_obj_mode = bpy.context.mode
+
+        for obj in context.selected_objects:
+            if obj.type != 'MESH':
+                continue
+            if not "plasticity_id" in obj.keys():
+                continue
+            mesh = obj.data
+
+            self.set_plasticity_origin_to_origin(obj)
+
+        bpy.ops.object.mode_set(mode=map_mode(prev_obj_mode))
+
+        return {'FINISHED'}
+
+    def set_plasticity_origin_to_origin(self, obj):
+        location = obj.location
+        transform = mathutils.Matrix.Identity(4)
+        transform.translation = location
+        transform_list = [item for sublist in transform for item in sublist]
+        obj["plasticity_transform"] = transform_list
 
 
 class PaintPlasticityFacesOperator(bpy.types.Operator):
