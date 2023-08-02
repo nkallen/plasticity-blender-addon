@@ -134,6 +134,7 @@ class SceneHandler:
             return
         transform_list = obj["plasticity_transform"]
         if transform_list is not None:
+            bpy.context.view_layer.objects.active = obj
             bpy.ops.object.mode_set(mode='OBJECT')
             old_matrix_world = obj.matrix_world.copy()
             transform = np.array(transform_list).reshape(4, 4)
