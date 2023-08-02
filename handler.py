@@ -50,7 +50,7 @@ class SceneHandler:
 
         return mesh
 
-    def __update_object(self, obj, object_type, version, name, verts, indices, normals, groups, face_ids):
+    def __update_object_and_mesh(self, obj, object_type, version, name, verts, indices, normals, groups, face_ids):
         if obj.mode == 'EDIT':
             bpy.ops.object.mode_set(mode='OBJECT')
 
@@ -78,14 +78,9 @@ class SceneHandler:
         denormalized_normals = normals.reshape(-1, 3)[indices]
         mesh.normals_split_custom_set(denormalized_normals)
 
-    def __update_mesh(self, obj, version, faces, verts, indices, normals, groups, face_ids):
+    def __update_mesh_ngons(self, obj, version, faces, verts, indices, normals, groups, face_ids):
         if obj.mode == 'EDIT':
             bpy.ops.object.mode_set(mode='OBJECT')
-
-        scene = bpy.context.scene
-        prop_plasticity_unit_scale = scene.prop_plasticity_unit_scale
-        obj.scale = (prop_plasticity_unit_scale,
-                     prop_plasticity_unit_scale, prop_plasticity_unit_scale)
 
         mesh = obj.data
         mesh.clear_geometry()
@@ -129,9 +124,8 @@ class SceneHandler:
         denormalized_normals = normals.reshape(-1, 3)[indices]
         mesh.normals_split_custom_set(denormalized_normals)
 
-    def __add_object(self, to_collection, filename, object_type, plasticity_id, name, mesh):
+    def __add_object(self, filename, object_type, plasticity_id, name, mesh):
         mesh_obj = bpy.data.objects.new(name, mesh)
-        to_collection.objects.link(mesh_obj)
         self.files[filename][PlasticityIdUniquenessScope.ITEM][plasticity_id] = mesh_obj
         mesh_obj["plasticity_id"] = plasticity_id
         mesh_obj["plasticity_filename"] = filename
@@ -146,6 +140,8 @@ class SceneHandler:
     def __replace(self, filename, inbox_collection, version, objects):
         scene = bpy.context.scene
         prop_plasticity_unit_scale = scene.prop_plasticity_unit_scale
+
+        collections_to_unlink = set()
 
         for item in objects:
             object_type = item['type']
@@ -168,7 +164,7 @@ class SceneHandler:
                 if plasticity_id not in self.files[filename][PlasticityIdUniquenessScope.ITEM]:
                     mesh = self.__create_mesh(
                         name, verts, faces, normals, groups, face_ids)
-                    obj = self.__add_object(inbox_collection, filename, object_type,
+                    obj = self.__add_object(filename, object_type,
                                             plasticity_id, name, mesh)
                     obj.scale = (prop_plasticity_unit_scale,
                                  prop_plasticity_unit_scale, prop_plasticity_unit_scale)
@@ -176,8 +172,10 @@ class SceneHandler:
                     obj = self.files[filename][PlasticityIdUniquenessScope.ITEM].get(
                         plasticity_id)
                     if obj:
-                        self.__update_object(
+                        self.__update_object_and_mesh(
                             obj, object_type, version, name, verts, faces, normals, groups, face_ids)
+                        for parent in obj.users_collection:
+                            parent.objects.unlink(obj)
 
                 if obj:
                     obj.hide_set(is_hidden or not is_visible)
@@ -190,37 +188,53 @@ class SceneHandler:
                         group_collection = bpy.data.collections.new(name)
                         group_collection["plasticity_id"] = plasticity_id
                         group_collection["plasticity_filename"] = filename
-                        inbox_collection.children.link(group_collection)
                         self.files[filename][PlasticityIdUniquenessScope.GROUP][plasticity_id] = group_collection
                     else:
                         group_collection = self.files[filename][PlasticityIdUniquenessScope.GROUP].get(
                             plasticity_id)
                         group_collection.name = name
+                        collections_to_unlink.add(group_collection)
 
                     if group_collection:
                         group_collection.hide_viewport = is_hidden or not is_visible
                         group_collection.hide_select = not is_selectable
 
+        # Unlink all mirrored collections, in case they have moved. It doesn't seem like there is a more efficient way to do this??
+        for potential_parent in bpy.data.collections:
+            to_unlink = [
+                child for child in potential_parent.children if child in collections_to_unlink]
+            for child in to_unlink:
+                potential_parent.children.unlink(child)
+
         for item in objects:
             object_type = item['type']
-            uniqueness_scope = PlasticityIdUniquenessScope.ITEM
-            if object_type == ObjectType.GROUP.value:
-                uniqueness_scope = PlasticityIdUniquenessScope.GROUP
+            uniqueness_scope = PlasticityIdUniquenessScope.ITEM if object_type != ObjectType.GROUP.value else PlasticityIdUniquenessScope.GROUP
             plasticity_id = item['id']
             parent_id = item['parent_id']
-            if parent_id > 0:
-                parent = self.files[filename][PlasticityIdUniquenessScope.GROUP].get(
-                    parent_id)
-                if parent:
-                    obj = self.files[filename][uniqueness_scope].get(
-                        plasticity_id)
-                    if obj:
-                        if object_type == ObjectType.GROUP.value:
-                            inbox_collection.children.unlink(obj)
-                            parent.children.link(obj)
-                        else:
-                            inbox_collection.objects.unlink(obj)
-                            parent.objects.link(obj)
+
+            if plasticity_id == 0:  # root group
+                continue
+
+            obj = self.files[filename][uniqueness_scope].get(
+                plasticity_id)
+            if not obj:
+                self.report(
+                    {'ERROR'}, "Object of type {} with id {} and parent_id {} not found".format(
+                        object_type, plasticity_id, parent_id))
+                continue
+
+            parent = inbox_collection if parent_id == 0 else self.files[filename][PlasticityIdUniquenessScope.GROUP].get(
+                parent_id)
+            if not parent:
+                self.report(
+                    {'ERROR'}, "Parent of object of type {} with id {} and parent_id {} not found".format(
+                        object_type, plasticity_id, parent_id))
+                continue
+
+            if object_type == ObjectType.GROUP.value:
+                parent.children.link(obj)
+            else:
+                parent.objects.link(obj)
 
     def __inbox_for_filename(self, filename):
         plasticity_collection = bpy.data.collections.get("Plasticity")
@@ -327,7 +341,7 @@ class SceneHandler:
             obj = self.files[filename][PlasticityIdUniquenessScope.ITEM].get(
                 plasticity_id)
             if obj:
-                self.__update_mesh(
+                self.__update_mesh_ngons(
                     obj, version, face, position, index, normal, group, face_id)
 
         bpy.context.view_layer.objects.active = prev_active_object
