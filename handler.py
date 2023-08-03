@@ -1,3 +1,5 @@
+# TODO:
+# - [ ] All on_... methods should call operators (to better handle undo, to have reporting be visible in the ui, etc)
 from collections import defaultdict
 from enum import Enum
 
@@ -23,7 +25,8 @@ class ObjectType(Enum):
 class SceneHandler:
     def __init__(self):
         # NOTE: filename -> [item/group] -> id -> object
-        # FIXME: it turns out that caching this is unsafe with undo/redo; for now call __prepare() before every update
+        # NOTE: items/groups have overlapping ids
+        # NOTE: it turns out that caching this is unsafe with undo/redo; call __prepare() before every update
         self.files = {}
 
     def __create_mesh(self, name, verts, indices, normals, groups, face_ids):
@@ -130,11 +133,15 @@ class SceneHandler:
         self.update_pivot(obj)
 
     def update_pivot(self, obj):
+        # NOTE: this doesn't work unfortunately. It seems like changing matrix_world or matrix_local
+        # is only possible in special contexts that I cannot yet figure out.
+        return
         if not "plasticity_transform" in obj:
             return
         transform_list = obj["plasticity_transform"]
         if transform_list is not None:
             bpy.context.view_layer.objects.active = obj
+            obj.select_set(True)
             bpy.ops.object.mode_set(mode='OBJECT')
             old_matrix_world = obj.matrix_world.copy()
             transform = np.array(transform_list).reshape(4, 4)
@@ -387,7 +394,7 @@ class SceneHandler:
 
         self.__prepare(filename)
 
-        prev_obj_mode = bpy.context.object.mode
+        prev_obj_mode = bpy.context.object.mode if bpy.context.object else None
         prev_active_object = bpy.context.view_layer.objects.active
         prev_selected_objects = bpy.context.selected_objects
 
@@ -410,7 +417,8 @@ class SceneHandler:
         bpy.context.view_layer.objects.active = prev_active_object
         for obj in prev_selected_objects:
             obj.select_set(True)
-        bpy.ops.object.mode_set(mode=prev_obj_mode)
+        if prev_obj_mode:
+            bpy.ops.object.mode_set(mode=prev_obj_mode)
 
         bpy.ops.ed.undo_push(message="/Plasticity refacet")
 

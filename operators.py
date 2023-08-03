@@ -13,7 +13,25 @@ class SelectByFaceIDOperator(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return any("plasticity_id" in obj.keys() and obj.type == 'MESH' for obj in context.selected_objects)
+        if context.mode != 'EDIT_MESH':
+            return False
+        obj = context.active_object
+        if not obj:
+            return False
+        if not obj.select_get():
+            return False
+        if not obj.type == 'MESH':
+            return False
+        if not "plasticity_id" in obj.keys():
+            return False
+        active_poly_index = obj.data.polygons.active
+        if active_poly_index is None:
+            return False
+        active_poly = obj.data.polygons[active_poly_index]
+        # surprisingly, the active polygon does not need to be selected, and somehow the following doesn't work:
+        if not active_poly.select:
+            return False
+        return True
 
     def execute(self, context):
         obj = context.object
@@ -237,7 +255,6 @@ class SetPlasticityOriginToOriginOperator(bpy.types.Operator):
                 continue
             if not "plasticity_id" in obj.keys():
                 continue
-            mesh = obj.data
 
             self.set_plasticity_origin_to_origin(obj)
 
@@ -251,6 +268,38 @@ class SetPlasticityOriginToOriginOperator(bpy.types.Operator):
         transform.translation = location
         transform_list = [item for sublist in transform for item in sublist]
         obj["plasticity_transform"] = transform_list
+
+
+class ClearPlasticityOriginOperator(bpy.types.Operator):
+    bl_idname = "mesh.clear_plasticity_origin"
+    bl_label = "Clear Plasticity Origin"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        if not any("plasticity_id" in obj.keys() and obj.type == 'MESH' for obj in context.selected_objects):
+            return False
+        if not any("plasticity_transform" in obj.keys() for obj in context.selected_objects):
+            return False
+        return True
+
+    def execute(self, context):
+        prev_obj_mode = bpy.context.mode
+
+        for obj in context.selected_objects:
+            if obj.type != 'MESH':
+                continue
+            if not "plasticity_id" in obj.keys():
+                continue
+
+            self.clear_plasticity_origin(obj)
+
+        bpy.ops.object.mode_set(mode=map_mode(prev_obj_mode))
+
+        return {'FINISHED'}
+
+    def clear_plasticity_origin(self, obj):
+        del obj["plasticity_transform"]
 
 
 class PaintPlasticityFacesOperator(bpy.types.Operator):

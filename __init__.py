@@ -22,10 +22,10 @@ def select_similar(self, context):
     self.layout.operator(operators.SelectByFaceIDOperator.bl_idname)
 
 
-def right_click_menu(self, context):
-    self.layout.separator()
-    self.layout.operator(
-        operators.SetPlasticityOriginToOriginOperator.bl_idname)
+# def right_click_menu(self, context):
+#     self.layout.separator()
+#     self.layout.operator(
+#         operators.SetPlasticityOriginToOriginOperator.bl_idname)
 
 
 def register():
@@ -44,9 +44,10 @@ def register():
     bpy.utils.register_class(
         operators.MarkSharpEdgesForPlasticityGroupsOperator)
     bpy.utils.register_class(operators.PaintPlasticityFacesOperator)
-    bpy.utils.register_class(operators.SetPlasticityOriginToOriginOperator)
+    # bpy.utils.register_class(operators.SetPlasticityOriginToOriginOperator)
+    # bpy.utils.register_class(operators.ClearPlasticityOriginOperator)
 
-    bpy.types.VIEW3D_MT_object_context_menu.append(right_click_menu)
+    # bpy.types.VIEW3D_MT_object_context_menu.append(right_click_menu)
     bpy.types.VIEW3D_MT_edit_mesh_select_similar.append(select_similar)
 
     bpy.types.Scene.prop_plasticity_server = bpy.props.StringProperty(
@@ -93,9 +94,10 @@ def unregister():
     bpy.utils.unregister_class(
         operators.MarkSharpEdgesForPlasticityGroupsOperator)
     bpy.utils.unregister_class(operators.PaintPlasticityFacesOperator)
-    bpy.utils.unregister_class(operators.SetPlasticityOriginToOriginOperator)
+    # bpy.utils.unregister_class(operators.SetPlasticityOriginToOriginOperator)
+    # bpy.utils.unregister_class(operators.ClearPlasticityOriginOperator)
 
-    bpy.types.VIEW3D_MT_object_context_menu.remove(right_click_menu)
+    # bpy.types.VIEW3D_MT_object_context_menu.remove(right_click_menu)
     bpy.types.VIEW3D_MT_edit_mesh_select_similar.remove(select_similar)
 
     del bpy.types.Scene.prop_plasticity_server
