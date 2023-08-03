@@ -2,8 +2,8 @@ from collections import defaultdict
 from enum import Enum
 
 import bpy
-import numpy as np
 import mathutils
+import numpy as np
 
 
 class PlasticityIdUniquenessScope(Enum):
@@ -157,7 +157,13 @@ class SceneHandler:
         if obj:
             bpy.data.objects.remove(obj, do_unlink=True)
 
-    def __replace(self, filename, inbox_collection, version, objects):
+    def __delete_group(self, filename, version, plasticity_id):
+        group = self.files[filename][PlasticityIdUniquenessScope.GROUP].pop(
+            plasticity_id, None)
+        if group:
+            bpy.data.groups.remove(group, do_unlink=True)
+
+    def __replace_objects(self, filename, inbox_collection, version, objects):
         scene = bpy.context.scene
         prop_plasticity_unit_scale = scene.prop_plasticity_unit_scale
 
@@ -313,7 +319,7 @@ class SceneHandler:
 
         return inbox_collection
 
-    def update(self, transaction):
+    def on_transaction(self, transaction):
         filename = transaction["filename"]
         version = transaction["version"]
 
@@ -328,16 +334,53 @@ class SceneHandler:
                 self.__delete_object(filename, version, plasticity_id)
 
         if "add" in transaction:
-            self.__replace(filename, inbox_collection,
-                           version, transaction["add"])
+            self.__replace_objects(filename, inbox_collection,
+                                   version, transaction["add"])
 
         if "update" in transaction:
-            self.__replace(filename, inbox_collection,
-                           version, transaction["update"])
+            self.__replace_objects(filename, inbox_collection,
+                                   version, transaction["update"])
 
         bpy.ops.ed.undo_push(message="/Plasticity update")
 
-    def refacet(self, filename, version, plasticity_ids, versions, faces, positions, indices, normals, groups, face_ids):
+    def on_list(self, message):
+        filename = message["filename"]
+        version = message["version"]
+
+        self.report({'INFO'}, "Updating " + filename +
+                    " to version " + str(version))
+        bpy.ops.ed.undo_push(message="Plasticity update")
+
+        inbox_collection = self.__prepare(filename)
+
+        all_items = set()
+        all_groups = set()
+        if "add" in message:
+            for item in message["add"]:
+                if item["type"] == ObjectType.GROUP.value:
+                    all_groups.add(item["id"])
+                else:
+                    all_items.add(item["id"])
+            self.__replace_objects(filename, inbox_collection,
+                                   version, message["add"])
+
+        to_delete = []
+        for plasticity_id, obj in self.files[filename][PlasticityIdUniquenessScope.ITEM].items():
+            if plasticity_id not in all_items:
+                to_delete.append(plasticity_id)
+        for plasticity_id in to_delete:
+            self.__delete_object(filename, version, plasticity_id)
+
+        to_delete = []
+        for plasticity_id, obj in self.files[filename][PlasticityIdUniquenessScope.GROUP].items():
+            if plasticity_id not in all_groups:
+                to_delete.append(plasticity_id)
+        for plasticity_id in to_delete:
+            self.__delete_group(filename, version, plasticity_id)
+
+        bpy.ops.ed.undo_push(message="/Plasticity update")
+
+    def on_refacet(self, filename, version, plasticity_ids, versions, faces, positions, indices, normals, groups, face_ids):
         self.report({'INFO'}, "Refaceting " + filename +
                     " to version " + str(version))
         bpy.ops.ed.undo_push(message="Plasticity refacet")
@@ -371,11 +414,11 @@ class SceneHandler:
 
         bpy.ops.ed.undo_push(message="/Plasticity refacet")
 
-    def new_version(self, filename, version):
+    def on_new_version(self, filename, version):
         self.report({'INFO'}, "New version of " +
                     filename + " available: " + str(version))
 
-    def new_file(self, filename):
+    def on_new_file(self, filename):
         self.report({'INFO'}, "New file available: " + filename)
 
     def on_connect(self):

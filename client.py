@@ -283,7 +283,7 @@ class PlasticityClient:
         offset += 4
 
         if message_type == MessageType.TRANSACTION_1:
-            self.__on_transaction(view, offset)
+            self.__on_transaction(view, offset, update_only=True)
 
         elif message_type == MessageType.LIST_ALL_1 or message_type == MessageType.LIST_SOME_1 or message_type == MessageType.LIST_VISIBLE_1:
             message_id = int.from_bytes(view[offset:offset + 4], 'little')
@@ -296,7 +296,8 @@ class PlasticityClient:
                 self.report({'ERROR'}, f"List all failed with code: {code}")
                 return
 
-            self.__on_transaction(view, offset)
+            # NOTE: ListAll only has an Add message inside it so it is a bit unlike a regular transaction
+            self.__on_transaction(view, offset, update_only=False)
 
         elif message_type == MessageType.NEW_VERSION_1:
             filename_length = int.from_bytes(view[offset:offset + 4], 'little')
@@ -316,7 +317,7 @@ class PlasticityClient:
             offset += 4
 
             bpy.app.timers.register(
-                lambda: self.handler.new_version(filename, version), first_interval=0.001)
+                lambda: self.handler.on_new_version(filename, version), first_interval=0.001)
 
         elif message_type == MessageType.NEW_FILE_1:
             filename_length = int.from_bytes(view[offset:offset + 4], 'little')
@@ -329,12 +330,12 @@ class PlasticityClient:
             self.filename = filename
 
             bpy.app.timers.register(
-                lambda: self.handler.new_file(filename), first_interval=0.001)
+                lambda: self.handler.on_new_file(filename), first_interval=0.001)
 
         elif message_type == MessageType.REFACET_SOME_1:
             self.__on_refacet(view, offset)
 
-    def __on_transaction(self, view, offset):
+    def __on_transaction(self, view, offset, update_only):
         filename_length = int.from_bytes(view[offset:offset + 4], 'little')
         offset += 4
 
@@ -369,8 +370,12 @@ class PlasticityClient:
                 view[offset:offset + item_length], transaction)
             offset += item_length
 
-        bpy.app.timers.register(lambda: self.handler.update(
-            transaction), first_interval=0.001)
+        if update_only:
+            bpy.app.timers.register(lambda: self.handler.on_transaction(
+                transaction), first_interval=0.001)
+        else:
+            bpy.app.timers.register(lambda: self.handler.on_list(
+                transaction), first_interval=0.001)
 
     def __on_refacet(self, view, offset):
         message_id = int.from_bytes(view[offset:offset + 4], 'little')
@@ -477,7 +482,7 @@ class PlasticityClient:
             groups.append(group)
             face_ids.append(face_id)
 
-        bpy.app.timers.register(lambda: self.handler.refacet(filename, file_version, plasticity_ids,
+        bpy.app.timers.register(lambda: self.handler.on_refacet(filename, file_version, plasticity_ids,
                                 versions, faces, positions, indices, normals, groups, face_ids), first_interval=0.001)
 
     def on_message_item(self, view, transaction):
