@@ -192,10 +192,5 @@ class PlasticityPanel(bpy.types.Panel):
             box.operator("mesh.paint_plasticity_faces",
                          text="Paint Plasticity Faces")
             box.separator()
-            box.operator("mesh.set_plasticity_origin_to_origin",
-                         text="Set plasticity origin to origin")
-            box.operator("mesh.clear_plasticity_origin",
-                         text="Clear plasticity origin")
-            box.separator()
             box.operator("mesh.select_by_plasticity_face_id",
                          text="Select similar faces")
