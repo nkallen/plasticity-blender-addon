@@ -100,11 +100,6 @@ class MarkSharpEdgesForPlasticityGroupsWithSplitNormalsOperator(bpy.types.Operat
                 continue
             mesh = obj.data
 
-            prev_obj_mode = bpy.context.object.mode
-            bpy.context.view_layer.objects.active = obj
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_all(action='SELECT')
-            bpy.ops.mesh.remove_doubles(threshold=1e-06)
             bpy.ops.object.mode_set(mode='OBJECT')
 
             if "plasticity_id" not in obj.keys():
@@ -175,9 +170,6 @@ class MarkSharpEdgesForPlasticityGroupsOperator(bpy.types.Operator):
             mesh = obj.data
 
             bpy.context.view_layer.objects.active = obj
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_all(action='SELECT')
-            bpy.ops.mesh.remove_doubles(threshold=1e-06)
             bpy.ops.object.mode_set(mode='OBJECT')
 
             if "plasticity_id" not in obj.keys():
