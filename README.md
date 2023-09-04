@@ -10,6 +10,6 @@ Various QOL improvements to the Plasticity Bridge Blender add-on:
 - Added functionality to merge existing UV seams based on arbitrary Plasticity group polygon selection.
 - Added functionality to select Plasticity groups edges.
 - Changed default port from 8080 to 8090 (conflicting with some AV software).
-- Exposed prop_surface_angle_tolerance parameter, allowing users to have more control when re-meshing and wanting to have smooth curved objects at a small scale. Works well in combination when using small values for Min Width.
+- Exposed prop_surface_angle_tolerance parameter, allowing users to have more control when re-meshing and wanting to keep smooth curved objects at a small scale. Works well in combination when using small values for Min Width.
 
 Always make sure that you remesh the imported CAD data from Plasticity at least once, otherwise most of the Brigde features won't work as expected.
