@@ -2,7 +2,7 @@ import bpy
 import math
 
 from .__init__ import plasticity_client
-
+from .client import FacetShapeType
 
 class ConnectButton(bpy.types.Operator):
     bl_idname = "wm.connect_button"
@@ -92,6 +92,7 @@ class RefacetButton(bpy.types.Operator):
 
     def execute(self, context):
         prop_tolerance = context.scene.prop_plasticity_facet_tolerance
+        prop_surface_angle_tolerance = context.scene.prop_plasticity_surface_angle_tolerance
         prop_angle = context.scene.prop_plasticity_facet_angle
         prop_max_sides = 3 if context.scene.prop_plasticity_facet_tri_or_ngon == "TRI" else 128
         prop_plane_angle = math.pi / 4.0 if (prop_max_sides > 4) else 0
@@ -102,12 +103,12 @@ class RefacetButton(bpy.types.Operator):
         if context.scene.prop_plasticity_ui_show_advanced_facet:
             prop_min_width = context.scene.prop_plasticity_facet_min_width
             prop_max_width = context.scene.prop_plasticity_facet_max_width
-            if prop_max_width < prop_min_width:
-                prop_max_width = prop_min_width
+            #if prop_max_width < prop_min_width:
+             #   prop_max_width = prop_min_width
             # NOTE: it is possible the user wants to do this but this will almost certain overwhelm the server and blender!
-            if 0 < prop_max_width < 0.02:
-                prop_max_width = 0.02
-            curve_chord_max = prop_max_width * math.sqrt(0.5)
+            #if 0 < prop_max_width < 0.02:
+             #   prop_max_width = 0.02
+            #curve_chord_max = prop_max_width * math.sqrt(0.5)
 
         plasticity_ids_by_filename = {}
         for obj in context.selected_objects:
@@ -118,8 +119,20 @@ class RefacetButton(bpy.types.Operator):
                     obj["plasticity_id"])
 
         for filename, plasticity_ids in plasticity_ids_by_filename.items():
-            plasticity_client.refacet_some(filename, plasticity_ids, curve_chord_tolerance=prop_tolerance, min_width=prop_min_width, max_width=prop_max_width,
-                                           surface_plane_tolerance=prop_tolerance, curve_chord_angle=prop_angle, surface_plane_angle=prop_angle, max_sides=prop_max_sides, plane_angle=prop_plane_angle, curve_chord_max=curve_chord_max)
+            plasticity_client.refacet_some(filename, 
+                                           plasticity_ids,
+                                           relative_to_bbox=True,                                           
+                                           curve_chord_tolerance=prop_tolerance, 
+                                           curve_chord_angle=prop_angle,
+                                           surface_plane_tolerance=prop_tolerance,
+                                           surface_plane_angle=prop_surface_angle_tolerance,
+                                           match_topology=True,
+                                           max_sides=prop_max_sides,
+                                           plane_angle=prop_plane_angle,
+                                           min_width=prop_min_width, 
+                                           max_width=prop_max_width,                                           
+                                           curve_chord_max=curve_chord_max,
+                                           shape=FacetShapeType.CUT)
 
         return {'FINISHED'}
 
@@ -181,16 +194,32 @@ class PlasticityPanel(bpy.types.Panel):
                          text="Min width")
                 box.prop(scene, "prop_plasticity_facet_max_width",
                          text="Max width")
+                box.prop(scene, "prop_plasticity_curve_chord_tolerance",
+                         text="Curve Chord Tolerance")
+                box.prop(scene, "prop_plasticity_surface_angle_tolerance",
+                         text="Surface Angle Tolerance")                          
             layout.separator()
 
             box = layout.box()
             box.label(text="Utilities:")
-            box.operator("mesh.mark_sharp_edges_for_plasticity_with_split_normals",
-                         text="Mark sharp")
-            box.operator("mesh.mark_sharp_edges_for_plasticity",
-                         text="Mark sharp at all faces")
-            box.operator("mesh.paint_plasticity_faces",
-                         text="Paint Plasticity Faces")
-            box.separator()
+            #box.operator("mesh.mark_sharp_edges_for_plasticity_with_split_normals",
+             #            text="Mark sharp")
+            #box.operator("mesh.mark_sharp_edges_for_plasticity",
+             #            text="Mark sharp at all faces")            
+            #box.prop(scene, "mark_sharp")
+            #box.prop(scene, "mark_seam") 
+
+            box.operator("mesh.auto_mark_edges", text="Auto Mark Edges")
+            box.operator("mesh.merge_uv_seams", text="Merge UV Seams")
+            #box.operator("mesh.merge_hard_edges", text="Merge Hard Edges")
+            #box.prop(scene, "mark_sharp")
+            #box.prop(scene, "mark_seam")             
             box.operator("mesh.select_by_plasticity_face_id",
-                         text="Select similar faces")
+                         text="Select Plasticity Face(s)")
+            box.operator("mesh.select_by_plasticity_face_id_edge",
+                         text="Select Plasticity Edges")                                                  
+            box.operator("mesh.paint_plasticity_faces",
+                         text="Paint Plasticity Faces")            
+
+                         
+                         
