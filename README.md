@@ -1,5 +1,7 @@
 # plasticity-blender-addon
 
+Experimental Plasticity blender addon to send facet data over websockets
+
 Various QOL improvements to the Plasticity Bridge Blender add-on:
 
 - Consolidated Mark Sharp and Mark Sharp at boundaries into a single operator (AutoMarkEdgesOperator) with options to mark selection as Hard Edges or UV Seams (Mark Sharp, Mark Seam).
