@@ -7,8 +7,8 @@ from .handler import SceneHandler
 bl_info = {
     "name": "Plasticity",
     "description": "A bridge to Plasticity",
-    "author": "Nick Kallen",
-    "version": (1, 0),
+    "author": "Nick Kallen, User129863",
+    "version": (1, 0, 1),
     "blender": (2, 80, 0),
     "location": "View3D > Sidebar > Plasticity",
     "category": "Object",
