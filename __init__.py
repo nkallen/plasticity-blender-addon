@@ -7,8 +7,8 @@ from .handler import SceneHandler
 bl_info = {
     "name": "Plasticity",
     "description": "A bridge to Plasticity",
-    "author": "Nick Kallen",
-    "version": (1, 0),
+    "author": "Nick Kallen, User129863",
+    "version": (1, 0, 1),
     "blender": (2, 80, 0),
     "location": "View3D > Sidebar > Plasticity",
     "category": "Object",
@@ -39,11 +39,15 @@ def register():
     bpy.utils.register_class(ui.RefacetButton)
     bpy.utils.register_class(ui.PlasticityPanel)
     bpy.utils.register_class(operators.SelectByFaceIDOperator)
+    bpy.utils.register_class(operators.SelectByFaceIDEdgeOperator)
     bpy.utils.register_class(
         operators.MarkSharpEdgesForPlasticityGroupsWithSplitNormalsOperator)
     bpy.utils.register_class(
         operators.MarkSharpEdgesForPlasticityGroupsOperator)
-    bpy.utils.register_class(operators.PaintPlasticityFacesOperator)
+    bpy.utils.register_class(operators.AutoMarkEdgesOperator)
+    bpy.utils.register_class(operators.MergeUVSeams)
+    #bpy.utils.register_class(operators.MergeHardEdges)
+    bpy.utils.register_class(operators.PaintPlasticityFacesOperator)    
     # bpy.utils.register_class(operators.SetPlasticityOriginToOriginOperator)
     # bpy.utils.register_class(operators.ClearPlasticityOriginOperator)
 
@@ -51,7 +55,7 @@ def register():
     bpy.types.VIEW3D_MT_edit_mesh_select_similar.append(select_similar)
 
     bpy.types.Scene.prop_plasticity_server = bpy.props.StringProperty(
-        name="Server", default="localhost:8080")
+        name="Server", default="localhost:8090")
     bpy.types.Scene.prop_plasticity_facet_tolerance = bpy.props.FloatProperty(
         name="Tolerance", default=0.01, min=0.0001, max=1.0)
     bpy.types.Scene.prop_plasticity_facet_angle = bpy.props.FloatProperty(
@@ -74,6 +78,10 @@ def register():
         name="Max Width", default=0.0, min=0, unit="LENGTH")
     bpy.types.Scene.prop_plasticity_unit_scale = bpy.props.FloatProperty(
         name="Unit Scale", default=1.0, min=0.0001, max=1000.0)
+    bpy.types.Scene.prop_plasticity_surface_angle_tolerance = bpy.props.FloatProperty(
+        name="Surface Angle tolerance", default=0.35, min=0.0001, max=1.0)        
+    bpy.types.Scene.mark_seam = bpy.props.BoolProperty(name="Mark Seam")        
+    bpy.types.Scene.mark_sharp = bpy.props.BoolProperty(name="Mark Sharp")     
 
     print("Plasticity client registered")
 
@@ -89,10 +97,14 @@ def unregister():
     bpy.utils.unregister_class(ui.UnsubscribeAllButton)
     bpy.utils.unregister_class(ui.RefacetButton)
     bpy.utils.unregister_class(operators.SelectByFaceIDOperator)
+    bpy.utils.unregister_class(operators.SelectByFaceIDEdgeOperator)
     bpy.utils.unregister_class(
         operators.MarkSharpEdgesForPlasticityGroupsWithSplitNormalsOperator)
     bpy.utils.unregister_class(
         operators.MarkSharpEdgesForPlasticityGroupsOperator)
+    bpy.utils.unregister_class(operators.AutoMarkEdgesOperator)
+    bpy.utils.unregister_class(operators.MergeUVSeams)
+    #bpy.utils.unregister_class(operators.MergeHardEdges)
     bpy.utils.unregister_class(operators.PaintPlasticityFacesOperator)
     # bpy.utils.unregister_class(operators.SetPlasticityOriginToOriginOperator)
     # bpy.utils.unregister_class(operators.ClearPlasticityOriginOperator)
@@ -109,7 +121,10 @@ def unregister():
     del bpy.types.Scene.prop_plasticity_facet_min_width
     del bpy.types.Scene.prop_plasticity_facet_max_width
     del bpy.types.Scene.prop_plasticity_unit_scale
-
+    del bpy.types.Scene.prop_plasticity_surface_angle_tolerance  
+    del bpy.types.Scene.mark_seam
+    del bpy.types.Scene.mark_sharp           
+    
 
 if __name__ == "__main__":
     register()
