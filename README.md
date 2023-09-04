@@ -9,4 +9,4 @@ Various QOL improvements to the Plasticity Bridge Blender add-on:
 - Added functionality to select Plasticity groups edges.
 - Changed default port from 8080 to 8090 (conflicting with some AV software).
 
-Always make sure that you remesh the imported CAD data from Plasticity at least once, otherwise most of the features won't work as expected.
+Always make sure that you remesh the imported CAD data from Plasticity at least once, otherwise most of the Brigde features won't work as expected.
