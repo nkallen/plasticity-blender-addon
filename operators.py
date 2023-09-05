@@ -296,6 +296,13 @@ class MergeUVSeams(bpy.types.Operator):
     bl_label = "Merge UV Seams"
     bl_options = {'REGISTER', 'UNDO'}    
 
+    @classmethod
+    def poll(cls, context):        
+        if context.mode != 'EDIT_MESH':
+            return False
+        if not active_poly.select:
+            return False    
+            
     def execute(self, context):
         bpy.ops.mesh.select_linked(delimit={'SEAM'})
         bpy.ops.mesh.mark_seam(clear=True)
