@@ -198,9 +198,9 @@ class PlasticityPanel(bpy.types.Panel):
                 box.prop(scene, "prop_plasticity_facet_max_width",
                          text="Max width")
                 box.prop(scene, "prop_plasticity_curve_chord_tolerance",
-                         text="Curve Chord Tolerance", default=context.scene.prop.plasticity_facet_tolerance)
+                         text="Curve Chord Tolerance", default=context.scene.prop_plasticity_facet_tolerance)
                 box.prop(scene, "prop_plasticity_surface_angle_tolerance",
-                         text="Surface Angle Tolerance", default=context.scene.prop.plasticity_facet_angle)
+                         text="Surface Angle Tolerance", default=context.scene.prop_plasticity_facet_angle)
             layout.separator()
 
             box = layout.box()
