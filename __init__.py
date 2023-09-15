@@ -8,7 +8,7 @@ bl_info = {
     "name": "Plasticity",
     "description": "A bridge to Plasticity",
     "author": "Nick Kallen, User129863",
-    "version": (1, 0, 2),
+    "version": (1, 0, 3),
     "blender": (2, 80, 0),
     "location": "View3D > Sidebar > Plasticity",
     "category": "Object",
@@ -43,7 +43,7 @@ def register():
     bpy.types.Scene.prop_plasticity_server = bpy.props.StringProperty(
         name="Server", default="localhost:8980")
     bpy.types.Scene.prop_plasticity_facet_tolerance = bpy.props.FloatProperty(
-        name="Tolerance", default=0.01, min=0.0001, max=1.0)
+        name="Tolerance", default=0.01, min=0.0001, max=0.1, step=0.001, precision=6)
     bpy.types.Scene.prop_plasticity_facet_angle = bpy.props.FloatProperty(
         name="Angle", default=0.45, min=0.1, max=1.0)
     bpy.types.Scene.prop_plasticity_list_only_visible = bpy.props.BoolProperty(
@@ -59,13 +59,19 @@ def register():
     bpy.types.Scene.prop_plasticity_ui_show_advanced_facet = bpy.props.BoolProperty(
         name="Advanced", default=False)
     bpy.types.Scene.prop_plasticity_facet_min_width = bpy.props.FloatProperty(
-        name="Min Width", default=0.0, min=0, unit="LENGTH")
+        name="Min Width", default=0.0, min=0, max=10, unit="LENGTH")
     bpy.types.Scene.prop_plasticity_facet_max_width = bpy.props.FloatProperty(
-        name="Max Width", default=0.0, min=0, unit="LENGTH")
+        name="Max Width", default=0.0, min=0.0001, max=1000.0, step=0.01, soft_min=0.02, precision=6, unit="LENGTH")
     bpy.types.Scene.prop_plasticity_unit_scale = bpy.props.FloatProperty(
         name="Unit Scale", default=1.0, min=0.0001, max=1000.0)
+    bpy.types.Scene.prop_plasticity_curve_chord_tolerance = bpy.props.FloatProperty(
+        name="Edge chord tolerance", default=0.01, min=0.0001, step=0.01, max=1.0, precision=6)
+    bpy.types.Scene.prop_plasticity_curve_angle_tolerance = bpy.props.FloatProperty(
+        name="Edge Angle tolerance", default=0.45, min=0.1, max=1.0)
+    bpy.types.Scene.prop_plasticity_surface_plane_tolerance = bpy.props.FloatProperty(
+        name="Face plane tolerance", default=0.01, min=0.0001, step=0.01, max=1.0, precision=6)
     bpy.types.Scene.prop_plasticity_surface_angle_tolerance = bpy.props.FloatProperty(
-        name="Surface Angle tolerance", default=0.35, min=0.0001, max=1.0)
+        name="Face Angle tolerance", default=0.45, min=0.1, max=1.0)
     bpy.types.Scene.mark_seam = bpy.props.BoolProperty(name="Mark Seam")
     bpy.types.Scene.mark_sharp = bpy.props.BoolProperty(name="Mark Sharp")
 

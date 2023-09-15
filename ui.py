@@ -185,22 +185,28 @@ class PlasticityPanel(bpy.types.Panel):
             refacet_op = box.operator("wm.refacet", text="Refacet")
             box.label(text="Refacet config:")
 
-            box.prop(scene, "prop_plasticity_facet_tri_or_ngon",
-                     text="Tri or Ngon", expand=True)
-            box.prop(scene, "prop_plasticity_facet_tolerance", text="Tolerance")
-            box.prop(scene, "prop_plasticity_facet_angle", text="Angle")
-
             box.prop(context.scene, "prop_plasticity_ui_show_advanced_facet",
                      icon="TRIA_DOWN" if context.scene.prop_plasticity_ui_show_advanced_facet else "TRIA_RIGHT")
             if context.scene.prop_plasticity_ui_show_advanced_facet:
                 box.prop(scene, "prop_plasticity_facet_min_width",
                          text="Min width")
                 box.prop(scene, "prop_plasticity_facet_max_width",
-                         text="Max width")
+                         text="Max width", slider=False)
                 box.prop(scene, "prop_plasticity_curve_chord_tolerance",
-                         text="Curve Chord Tolerance", default=context.scene.prop_plasticity_facet_tolerance)
+                         text="Edge Chord Tolerance")
+                box.prop(scene, "prop_plasticity_curve_angle_tolerance",
+                         text="Edge Angle Tolerance")
+                box.prop(scene, "prop_plasticity_surface_plane_tolerance",
+                         text="Face Plane Tolerance")
                 box.prop(scene, "prop_plasticity_surface_angle_tolerance",
-                         text="Surface Angle Tolerance", default=context.scene.prop_plasticity_facet_angle)
+                         text="Face Angle Tolerance")
+            else:
+                box.prop(scene, "prop_plasticity_facet_tri_or_ngon",
+                         text="Tri or Ngon", expand=True)
+                box.prop(scene, "prop_plasticity_facet_tolerance",
+                         text="Tolerance")
+                box.prop(scene, "prop_plasticity_facet_angle",
+                         text="Angle")
             layout.separator()
 
             box = layout.box()

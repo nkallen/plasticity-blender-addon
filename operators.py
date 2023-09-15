@@ -146,6 +146,7 @@ class MergeUVSeams(bpy.types.Operator):
         active_poly_index = obj.data.polygons.active
         if active_poly_index is None:
             return False
+        return True
 
     def execute(self, context):
         bpy.ops.mesh.select_linked(delimit={'SEAM'})
