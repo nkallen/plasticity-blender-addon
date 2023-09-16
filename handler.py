@@ -188,9 +188,6 @@ class SceneHandler:
             normals = item['normals']
             groups = item['groups']
             face_ids = item['face_ids']
-            is_hidden = flags & 1
-            is_visible = flags & 2
-            is_selectable = flags & 4
 
             if object_type == ObjectType.SOLID.value or object_type == ObjectType.SHEET.value:
                 obj = None
@@ -237,6 +234,10 @@ class SceneHandler:
             uniqueness_scope = PlasticityIdUniquenessScope.ITEM if object_type != ObjectType.GROUP.value else PlasticityIdUniquenessScope.GROUP
             plasticity_id = item['id']
             parent_id = item['parent_id']
+            flags = item['flags']
+            is_hidden = flags & 1
+            is_visible = flags & 2
+            is_selectable = flags & 4
 
             if plasticity_id == 0:  # root group
                 continue
