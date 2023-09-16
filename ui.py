@@ -106,11 +106,8 @@ class RefacetButton(bpy.types.Operator):
             surface_plane_angle = context.scene.prop_plasticity_surface_angle_tolerance
             min_width = context.scene.prop_plasticity_facet_min_width
             max_width = context.scene.prop_plasticity_facet_max_width
-            if max_width < min_width and min_width > 0:
+            if max_width > 0 and max_width < min_width:
                 max_width = min_width
-            # NOTE: it is possible the user wants to do this but this will almost certain overwhelm the server and blender!
-            # if 0 < prop_max_width < 0.02:
-            #   prop_max_width = 0.02
             curve_chord_max = max_width * math.sqrt(0.5)
 
         plasticity_ids_by_filename = {}

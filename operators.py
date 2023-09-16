@@ -15,20 +15,7 @@ class SelectByFaceIDOperator(bpy.types.Operator):
         if context.mode != 'EDIT_MESH':
             return False
         obj = context.active_object
-        if not obj:
-            return False
-        if not obj.select_get():
-            return False
-        if not obj.type == 'MESH':
-            return False
-        if not "plasticity_id" in obj.keys():
-            return False
-        active_poly_index = obj.data.polygons.active
-        if active_poly_index is None:
-            return False
-        active_poly = obj.data.polygons[active_poly_index]
-        # surprisingly, the active polygon does not need to be selected, and somehow the following doesn't work:
-        if not active_poly.select:
+        if not obj or not obj.select_get() or obj.type != 'MESH' or "plasticity_id" not in obj.keys():
             return False
         return True
 
@@ -86,12 +73,6 @@ class SelectByFaceIDEdgeOperator(bpy.types.Operator):
             return False
         obj = context.active_object
         if not obj or not obj.select_get() or obj.type != 'MESH' or "plasticity_id" not in obj.keys():
-            return False
-        active_poly_index = obj.data.polygons.active
-        if active_poly_index is None:
-            return False
-        active_poly = obj.data.polygons[active_poly_index]
-        if not active_poly.select:
             return False
         return True
 
