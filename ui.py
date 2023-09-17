@@ -184,6 +184,9 @@ class PlasticityPanel(bpy.types.Panel):
 
             box.prop(context.scene, "prop_plasticity_ui_show_advanced_facet",
                      icon="TRIA_DOWN" if context.scene.prop_plasticity_ui_show_advanced_facet else "TRIA_RIGHT")
+            box.prop(scene, "prop_plasticity_facet_tri_or_ngon",
+                     text="Tri or Ngon", expand=True)     
+            
             if context.scene.prop_plasticity_ui_show_advanced_facet:
                 box.prop(scene, "prop_plasticity_facet_min_width",
                          text="Min width")
@@ -198,8 +201,6 @@ class PlasticityPanel(bpy.types.Panel):
                 box.prop(scene, "prop_plasticity_surface_angle_tolerance",
                          text="Face Angle Tolerance")
             else:
-                box.prop(scene, "prop_plasticity_facet_tri_or_ngon",
-                         text="Tri or Ngon", expand=True)
                 box.prop(scene, "prop_plasticity_facet_tolerance",
                          text="Tolerance")
                 box.prop(scene, "prop_plasticity_facet_angle",
