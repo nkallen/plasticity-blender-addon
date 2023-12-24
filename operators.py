@@ -8,6 +8,7 @@ import bpy
 class SelectByFaceIDOperator(bpy.types.Operator):
     bl_idname = "mesh.select_by_plasticity_face_id"
     bl_label = "Select by Plasticity Face ID"
+    bl_description = "Select the Plasticity face group from selected faces"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -65,6 +66,7 @@ class SelectByFaceIDOperator(bpy.types.Operator):
 class SelectByFaceIDEdgeOperator(bpy.types.Operator):
     bl_idname = "mesh.select_by_plasticity_face_id_edge"
     bl_label = "Select by Plasticity Face ID (Edge)"
+    bl_description = "Select the boundary edges of the Plasticity face group from selected faces"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -117,6 +119,7 @@ class SelectByFaceIDEdgeOperator(bpy.types.Operator):
 class MergeUVSeams(bpy.types.Operator):
     bl_idname = "mesh.merge_uv_seams"
     bl_label = "Merge UV Seams"
+    bl_description = "Merge seams to the edge loop boundary for the selected faces"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -321,6 +324,7 @@ def get_selected_group_ids(groups, bm):
 class PaintPlasticityFacesOperator(bpy.types.Operator):
     bl_idname = "mesh.paint_plasticity_faces"
     bl_label = "Paint Plasticity Faces"
+    bl_description = "Paint all the Plasticity face groups a random color and store them in a color attribute"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
