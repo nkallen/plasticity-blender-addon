@@ -215,7 +215,7 @@ class AutoMarkEdgesOperator(bpy.types.Operator):
     def mark_sharp_edges(self, obj, groups):
         mesh = obj.data
         bm = bmesh.new()
-        mesh.calc_normals_split()
+        # mesh.calc_normals_split()
         bm.from_mesh(mesh)
         bm.edges.ensure_lookup_table()
         bm.verts.ensure_lookup_table()
