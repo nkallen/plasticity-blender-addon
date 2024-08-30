@@ -170,7 +170,7 @@ class SceneHandler:
         group = self.files[filename][PlasticityIdUniquenessScope.GROUP].pop(
             plasticity_id, None)
         if group:
-            bpy.data.groups.remove(group, do_unlink=True)
+            bpy.data.collections.remove(group, do_unlink=True)
 
     def __replace_objects(self, filename, inbox_collection, version, objects):
         scene = bpy.context.scene
