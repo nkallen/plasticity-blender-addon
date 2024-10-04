@@ -49,6 +49,9 @@ class SceneHandler:
         if hasattr(mesh, 'use_auto_smooth'):
             mesh.use_auto_smooth = True
 
+        # NOTE: As of blender 4.2, the concrete type of user attributes cannot be numpy arrays.
+        assert isinstance(groups, list)
+        assert isinstance(face_ids, list)
         mesh["groups"] = groups
         mesh["face_ids"] = face_ids
         mesh["normals_split_custom"] = denormalized_normals
@@ -74,6 +77,9 @@ class SceneHandler:
         mesh.polygons.foreach_set("loop_start", range(0, len(indices), 3))
         mesh.polygons.foreach_set("loop_total", [3] * (len(indices) // 3))
 
+        # NOTE: As of blender 4.2, the concrete type of user attributes cannot be numpy arrays.
+        assert isinstance(groups, list)
+        assert isinstance(face_ids, list)  
         mesh["groups"] = groups
         mesh["face_ids"] = face_ids
 
@@ -121,6 +127,9 @@ class SceneHandler:
             mesh.polygons.foreach_set("loop_start", loop_start)
             mesh.polygons.foreach_set("loop_total", loop_total)
 
+        # NOTE: As of blender 4.2, the concrete type of user attributes cannot be numpy arrays.
+        assert isinstance(groups, list)
+        assert isinstance(face_ids, list)
         mesh["groups"] = groups
         mesh["face_ids"] = face_ids
 

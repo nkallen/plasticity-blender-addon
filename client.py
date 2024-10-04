@@ -464,6 +464,8 @@ class PlasticityClient:
             group = np.frombuffer(
                 view[offset:offset + num_groups * 4], dtype=np.int32)
             offset += num_groups * 4
+            # NOTE: As of blender 4.2, the concrete type of user attributes cannot be numpy arrays.
+            group = group.tolist()
 
             num_face_ids = int.from_bytes(
                 view[offset:offset + 4], 'little')
@@ -472,6 +474,8 @@ class PlasticityClient:
             face_id = np.frombuffer(
                 view[offset:offset + num_face_ids * 4], dtype=np.int32)
             offset += num_face_ids * 4
+            # NOTE: As of blender 4.2, the concrete type of user attributes cannot be numpy arrays.
+            face_id = face_id.tolist()
 
             plasticity_ids.append(plasticity_id)
             versions.append(version)
@@ -610,6 +614,8 @@ def decode_object_data(view, offset):
         groups = np.frombuffer(
             view[offset:offset + num_groups * 4], dtype=np.int32)
         offset += num_groups * 4
+        # NOTE: As of blender 4.2, the concrete type of user attributes cannot be numpy arrays.
+        groups = groups.tolist()
 
         num_face_ids = int.from_bytes(view[offset:offset + 4], 'little')
         offset += 4
@@ -617,6 +623,8 @@ def decode_object_data(view, offset):
         face_ids = np.frombuffer(
             view[offset:offset + num_face_ids * 4], dtype=np.int32)
         offset += num_face_ids * 4
+        # NOTE: As of blender 4.2, the concrete type of user attributes cannot be numpy arrays.
+        face_ids = face_ids.tolist()
 
     elif object_type == ObjectType.GROUP.value:
         pass
