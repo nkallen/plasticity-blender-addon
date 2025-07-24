@@ -30,6 +30,7 @@ class DisconnectButton(bpy.types.Operator):
         return plasticity_client.connected
 
     def execute(self, context):
+        context.window_manager.plasticity_busy = False
         plasticity_client.disconnect()
         return {'FINISHED'}
 
@@ -41,6 +42,8 @@ class ListButton(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
+        if context.window_manager.plasticity_busy:
+            return False
         return plasticity_client.connected
 
     def execute(self, context):
@@ -89,9 +92,14 @@ class RefacetButton(bpy.types.Operator):
     def poll(cls, context):
         if not plasticity_client.connected:
             return False
+        if context.window_manager.plasticity_busy:
+            return False
+
         return any("plasticity_id" in obj.keys() for obj in context.selected_objects)
 
     def execute(self, context):
+        context.window_manager.plasticity_busy = True
+
         curve_chord_tolerance = context.scene.prop_plasticity_facet_tolerance
         surface_plane_tolerance = context.scene.prop_plasticity_facet_tolerance
         curve_chord_angle = context.scene.prop_plasticity_facet_angle

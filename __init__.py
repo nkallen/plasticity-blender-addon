@@ -1,18 +1,18 @@
+bl_info = {
+    "name": "Plasticity",
+    "description": "A bridge to Plasticity",
+    "author": "Nick Kallen, User129863",
+    "version": (2, 0, 4),
+    "blender": (4, 1, 0),
+    "location": "View3D > Sidebar > Plasticity",
+    "category": "Object",
+}
+
 import bpy
 
 from . import operators, ui
 from .client import PlasticityClient
 from .handler import SceneHandler
-
-bl_info = {
-    "name": "Plasticity",
-    "description": "A bridge to Plasticity",
-    "author": "Nick Kallen, User129863",
-    "version": (2, 0, 3),
-    "blender": (4, 1, 0),
-    "location": "View3D > Sidebar > Plasticity",
-    "category": "Object",
-}
 
 handler = SceneHandler()
 plasticity_client = PlasticityClient(handler)
@@ -61,7 +61,7 @@ def register():
     bpy.types.Scene.prop_plasticity_facet_min_width = bpy.props.FloatProperty(
         name="Min Width", default=0.0, min=0, max=10, unit="LENGTH")
     bpy.types.Scene.prop_plasticity_facet_max_width = bpy.props.FloatProperty(
-        name="Max Width", default=0.0, min=0.0001, max=1000.0, step=0.01, soft_min=0.02, precision=6, unit="LENGTH")
+        name="Max Width", default=0.0, min=0, max=1000.0, step=0.01, soft_min=0.02, precision=6, unit="LENGTH")
     bpy.types.Scene.prop_plasticity_unit_scale = bpy.props.FloatProperty(
         name="Unit Scale", default=1.0, min=0.0001, max=1000.0)
     bpy.types.Scene.prop_plasticity_curve_chord_tolerance = bpy.props.FloatProperty(
@@ -74,6 +74,8 @@ def register():
         name="Face Angle tolerance", default=0.45, min=0.1, max=1.0)
     bpy.types.Scene.mark_seam = bpy.props.BoolProperty(name="Mark Seam")
     bpy.types.Scene.mark_sharp = bpy.props.BoolProperty(name="Mark Sharp")
+    bpy.types.WindowManager.plasticity_busy = bpy.props.BoolProperty(
+        name="Plasticity busy", default=False, options={'HIDDEN'})
 
     print("Plasticity client registered")
 
@@ -108,6 +110,7 @@ def unregister():
     del bpy.types.Scene.prop_plasticity_surface_angle_tolerance
     del bpy.types.Scene.mark_seam
     del bpy.types.Scene.mark_sharp
+    del bpy.types.WindowManager.plasticity_busy
 
 
 if __name__ == "__main__":

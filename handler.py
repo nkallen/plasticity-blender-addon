@@ -41,20 +41,13 @@ class SceneHandler:
         mesh.polygons.foreach_set("loop_start", np.arange(
             0, len(indices), 3, dtype=np.int32))
 
-        mesh.update()
-
-        denormalized_normals = np.zeros((len(indices), 3), dtype=np.float32)
-        denormalized_normals = normals.reshape(-1, 3)[indices]
-        mesh.normals_split_custom_set(denormalized_normals)
-        if hasattr(mesh, 'use_auto_smooth'):
-            mesh.use_auto_smooth = True
+        safe_loop_normals(mesh, indices, normals)
 
         # NOTE: As of blender 4.2, the concrete type of user attributes cannot be numpy arrays.
         assert isinstance(groups, list)
         assert isinstance(face_ids, list)
         mesh["groups"] = groups
         mesh["face_ids"] = face_ids
-        mesh["normals_split_custom"] = denormalized_normals
 
         return mesh
 
@@ -85,9 +78,7 @@ class SceneHandler:
 
         mesh.update()
 
-        denormalized_normals = np.zeros((len(indices), 3), dtype=np.float32)
-        denormalized_normals = normals.reshape(-1, 3)[indices]
-        mesh.normals_split_custom_set(denormalized_normals)
+        safe_loop_normals(mesh, indices, normals)
 
         self.update_pivot(obj)
 
@@ -133,13 +124,7 @@ class SceneHandler:
         mesh["groups"] = groups
         mesh["face_ids"] = face_ids
 
-        mesh.update()
-
-        if hasattr(mesh, 'use_auto_smooth'):
-            mesh.use_auto_smooth = True
-        denormalized_normals = np.zeros((len(indices), 3), dtype=np.float32)
-        denormalized_normals = normals.reshape(-1, 3)[indices]
-        mesh.normals_split_custom_set(denormalized_normals)
+        safe_loop_normals(mesh, indices, normals)
 
         self.update_pivot(obj)
 
@@ -336,6 +321,8 @@ class SceneHandler:
         return inbox_collection
 
     def on_transaction(self, transaction):
+        bpy.context.window_manager.plasticity_busy = False
+
         filename = transaction["filename"]
         version = transaction["version"]
 
@@ -360,6 +347,8 @@ class SceneHandler:
         bpy.ops.ed.undo_push(message="/Plasticity update")
 
     def on_list(self, message):
+        bpy.context.window_manager.plasticity_busy = False
+
         filename = message["filename"]
         version = message["version"]
 
@@ -397,6 +386,8 @@ class SceneHandler:
         bpy.ops.ed.undo_push(message="/Plasticity update")
 
     def on_refacet(self, filename, version, plasticity_ids, versions, faces, positions, indices, normals, groups, face_ids):
+        bpy.context.window_manager.plasticity_busy = False
+
         self.report({'INFO'}, "Refaceting " + filename +
                     " to version " + str(version))
         bpy.ops.ed.undo_push(message="Plasticity refacet")
@@ -439,10 +430,28 @@ class SceneHandler:
         self.report({'INFO'}, "New file available: " + filename)
 
     def on_connect(self):
+        bpy.context.window_manager.plasticity_busy = False
+
         self.files = {}
 
     def on_disconnect(self):
+        bpy.context.window_manager.plasticity_busy = False
+
         self.files = {}
 
     def report(self, level, message):
         print(message)
+
+def safe_loop_normals(mesh, indices, normals):
+    mesh.attributes.new("temp_custom_normals", 'FLOAT_VECTOR', 'CORNER')
+    mesh.attributes["temp_custom_normals"].data.foreach_set("vector", normals.reshape(-1, 3)[indices].ravel().tolist())
+
+    mesh.validate(clean_customdata=False)
+
+    buf = np.empty(len(mesh.loops) * 3, dtype=np.float32)
+    mesh.attributes["temp_custom_normals"].data.foreach_get("vector", buf)
+
+    mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
+
+    mesh.normals_split_custom_set(tuple(zip(*(iter(buf),) * 3)))
+    mesh.attributes.remove(mesh.attributes["temp_custom_normals"])
