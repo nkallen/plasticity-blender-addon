@@ -106,6 +106,8 @@ class SceneHandler:
                 "loop_start", range(0, len(new_indices), 3))
             mesh.polygons.foreach_set(
                 "loop_total", [3] * (len(new_indices) // 3))
+
+            safe_loop_normals(mesh, indices, normals)
         else:
             # Find where a new face/polygon starts (value changes in the array)
             diffs = np.where(np.diff(faces))[0] + 1
@@ -118,13 +120,15 @@ class SceneHandler:
             mesh.polygons.foreach_set("loop_start", loop_start)
             mesh.polygons.foreach_set("loop_total", loop_total)
 
+            safe_loop_normals(mesh, indices, normals)
+
+
         # NOTE: As of blender 4.2, the concrete type of user attributes cannot be numpy arrays.
         assert isinstance(groups, list)
         assert isinstance(face_ids, list)
         mesh["groups"] = groups
         mesh["face_ids"] = face_ids
 
-        safe_loop_normals(mesh, indices, normals)
 
         self.update_pivot(obj)
 
@@ -444,14 +448,14 @@ class SceneHandler:
 
 def safe_loop_normals(mesh, indices, normals):
     mesh.attributes.new("temp_custom_normals", 'FLOAT_VECTOR', 'CORNER')
-    mesh.attributes["temp_custom_normals"].data.foreach_set("vector", normals.reshape(-1, 3)[indices].ravel().tolist())
+    mesh.attributes["temp_custom_normals"].data.foreach_set("vector", normals.reshape(-1, 3)[indices].ravel())
 
-    mesh.validate(clean_customdata=False)
+    mesh.update()
 
     buf = np.empty(len(mesh.loops) * 3, dtype=np.float32)
     mesh.attributes["temp_custom_normals"].data.foreach_get("vector", buf)
 
     mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
 
-    mesh.normals_split_custom_set(tuple(zip(*(iter(buf),) * 3)))
+    mesh.normals_split_custom_set(buf.reshape(-1, 3))
     mesh.attributes.remove(mesh.attributes["temp_custom_normals"])

@@ -2,7 +2,7 @@ bl_info = {
     "name": "Plasticity",
     "description": "A bridge to Plasticity",
     "author": "Nick Kallen, User129863",
-    "version": (2, 0, 4),
+    "version": (2, 0, 5),
     "blender": (4, 1, 0),
     "location": "View3D > Sidebar > Plasticity",
     "category": "Object",
