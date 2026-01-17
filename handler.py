@@ -28,6 +28,7 @@ class SceneHandler:
         # NOTE: items/groups have overlapping ids
         # NOTE: it turns out that caching this is unsafe with undo/redo; call __prepare() before every update
         self.files = {}
+        self.client = None
 
     def __create_mesh(self, name, verts, indices, normals, groups, face_ids):
         mesh = bpy.data.meshes.new(name)
@@ -170,9 +171,26 @@ class SceneHandler:
         if group:
             bpy.data.collections.remove(group, do_unlink=True)
 
+    def __get_outbox_plasticity_ids(self, filename):
+        outbox_collection = self.__outbox_for_filename(filename)
+        outbox_ids = set()
+
+        def gather_ids(collection):
+            for obj in collection.objects:
+                pid = obj.get("plasticity_id")
+                if pid:
+                    outbox_ids.add(pid)
+            for child in collection.children:
+                gather_ids(child)
+
+        gather_ids(outbox_collection)
+        return outbox_ids
+
     def __replace_objects(self, filename, inbox_collection, version, objects):
         scene = bpy.context.scene
         prop_plasticity_unit_scale = scene.prop_plasticity_unit_scale
+
+        outbox_ids = self.__get_outbox_plasticity_ids(filename)
 
         collections_to_unlink = set()
 
@@ -188,6 +206,9 @@ class SceneHandler:
             normals = item['normals']
             groups = item['groups']
             face_ids = item['face_ids']
+
+            if plasticity_id in outbox_ids:
+                continue
 
             if object_type == ObjectType.SOLID.value or object_type == ObjectType.SHEET.value:
                 obj = None
@@ -242,6 +263,9 @@ class SceneHandler:
             if plasticity_id == 0:  # root group
                 continue
 
+            if plasticity_id in outbox_ids:
+                continue
+
             obj = self.files[filename][uniqueness_scope].get(
                 plasticity_id)
             if not obj:
@@ -289,8 +313,122 @@ class SceneHandler:
             inbox_collection["inbox"] = True
         return inbox_collection
 
+    def __outbox_for_filename(self, filename):
+        plasticity_collection = bpy.data.collections.get("Plasticity")
+        if not plasticity_collection:
+            plasticity_collection = bpy.data.collections.new("Plasticity")
+            bpy.context.scene.collection.children.link(plasticity_collection)
+
+        filename_collection = plasticity_collection.children.get(filename)
+        if not filename_collection:
+            filename_collection = bpy.data.collections.new(filename)
+            plasticity_collection.children.link(filename_collection)
+
+        outbox_collections = [
+            child for child in filename_collection.children if "outbox" in child]
+        outbox_collection = None
+        if len(outbox_collections) > 0:
+            outbox_collection = outbox_collections[0]
+        if not outbox_collection:
+            outbox_collection = bpy.data.collections.new("Outbox")
+            filename_collection.children.link(outbox_collection)
+            outbox_collection["outbox"] = True
+        return outbox_collection
+
+    def get_outbox_data(self, filename, only_visible=False):
+        KIND_MESH = 0
+        KIND_SUBD = 1
+
+        outbox_collection = self.__outbox_for_filename(filename)
+        groups = []
+        items = []
+
+        def gather_collections(collection, parent_blender_collection_id=""):
+            blender_collection_id = collection.get("blender_collection_id")
+            if not blender_collection_id:
+                blender_collection_id = str(id(collection))
+                collection["blender_collection_id"] = blender_collection_id
+
+            if collection != outbox_collection:
+                groups.append({
+                    "blender_collection_id": blender_collection_id,
+                    "name": collection.name,
+                    "parent_blender_collection_id": parent_blender_collection_id,
+                    "existing_group_id": collection.get("plasticity_group_id", 0),
+                })
+
+            current_parent_id = "" if collection == outbox_collection else blender_collection_id
+
+            for obj in collection.objects:
+                if obj.type != 'MESH':
+                    continue
+
+                if only_visible and not obj.visible_get():
+                    continue
+
+                subsurf_modifier = None
+                for mod in obj.modifiers:
+                    if mod.type == 'SUBSURF':
+                        subsurf_modifier = mod
+                        break
+
+                if not subsurf_modifier:
+                    self.report({'WARNING'}, f"Object '{obj.name}' has no Subdivision modifier, skipping")
+                    continue
+
+                rounded_corners = subsurf_modifier.boundary_smooth == 'ALL'
+                merge_patches = obj.get("pns_merge_patches", True)
+                interpolate_boundary = obj.get("pns_interpolate_boundary", True)
+
+                options = KIND_SUBD
+                if rounded_corners:
+                    options |= (1 << 8)
+                if merge_patches:
+                    options |= (1 << 9)
+                if interpolate_boundary:
+                    options |= (1 << 10)
+
+                if obj.mode == 'EDIT':
+                    obj.update_from_editmode()
+
+                mesh = obj.data
+                mesh.calc_loop_triangles()
+
+                positions = np.empty(len(mesh.vertices) * 3, dtype=np.float32)
+                mesh.vertices.foreach_get("co", positions)
+
+                indices = []
+                sizes = []
+                for poly in mesh.polygons:
+                    sizes.append(poly.loop_total)
+                    for loop_idx in range(poly.loop_start, poly.loop_start + poly.loop_total):
+                        indices.append(mesh.loops[loop_idx].vertex_index)
+
+                blender_id = obj.get("blender_pns_id")
+                if not blender_id:
+                    blender_id = str(id(obj))
+                    obj["blender_pns_id"] = blender_id
+
+                items.append({
+                    "blender_id": blender_id,
+                    "name": obj.name,
+                    "parent_blender_collection_id": current_parent_id,
+                    "existing_stable_id": obj.get("plasticity_id", 0),
+                    "options": options,
+                    "positions": positions,
+                    "indices": np.array(indices, dtype=np.uint32),
+                    "sizes": np.array(sizes, dtype=np.uint32),
+                })
+
+            for child in collection.children:
+                gather_collections(child, current_parent_id)
+
+        gather_collections(outbox_collection)
+        return {"groups": groups, "items": items}
+
     def __prepare(self, filename):
         inbox_collection = self.__inbox_for_filename(filename)
+        self.__outbox_for_filename(filename)
 
         def gather_items(collection):
             objects = list(collection.objects)
@@ -359,6 +497,10 @@ class SceneHandler:
         self.report({'INFO'}, "Updating " + filename +
                     " to version " + str(version))
         bpy.ops.ed.undo_push(message="Plasticity update")
+
+        if self.client and self.client.on_list_complete:
+            self.client.on_list_complete(filename)
+            self.client.on_list_complete = None
 
         inbox_collection = self.__prepare(filename)
 
@@ -442,6 +584,35 @@ class SceneHandler:
         bpy.context.window_manager.plasticity_busy = False
 
         self.files = {}
+
+    def on_put_some(self, code, group_results, item_results):
+        bpy.context.window_manager.plasticity_busy = False
+
+        if code != 200:
+            return
+
+        for item in item_results:
+            blender_id = item["blender_id"]
+            stable_id = item["stable_id"]
+            version_id = item["version_id"]
+
+            for obj in bpy.data.objects:
+                if obj.get("blender_pns_id") == blender_id:
+                    obj["plasticity_id"] = stable_id
+                    obj["plasticity_version"] = version_id
+                    break
+
+        for group in group_results:
+            blender_collection_id = group["blender_collection_id"]
+            group_id = group["group_id"]
+
+            for collection in bpy.data.collections:
+                if collection.get("blender_collection_id") == blender_collection_id:
+                    collection["plasticity_group_id"] = group_id
+                    break
+
+    def on_handshake(self, supported_messages):
+        self.report({'INFO'}, f"Server supports: {supported_messages}")
 
     def report(self, level, message):
         print(message)

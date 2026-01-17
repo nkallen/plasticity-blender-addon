@@ -34,6 +34,10 @@ class MessageType(Enum):
     UNSUBSCRIBE_ALL_1 = 25
     REFACET_SOME_1 = 26
 
+    PUT_SOME_1 = 31
+
+    HANDSHAKE_1 = 100
+
 
 class ObjectType(Enum):
     SOLID = 0
@@ -59,10 +63,31 @@ class PlasticityClient:
         self.message_id = 0
         self.handler = handler
         self.loop = asyncio.new_event_loop()
+        self.supported_messages = set()
+        self.on_list_complete = None
 
-    def list_all(self):
+    def handshake(self):
+        if self.connected:
+            self.report({'INFO'}, "Performing handshake...")
+
+            future = run_coroutine_threadsafe(
+                self.handshake_async(), self.loop)
+            future.result()
+
+    async def handshake_async(self):
+        self.message_id += 1
+
+        message = struct.pack("<I", MessageType.HANDSHAKE_1.value)
+        message += struct.pack("<I", self.message_id)
+        await self.websocket.send(message)
+
+    def supports(self, message_type: MessageType) -> bool:
+        return message_type.value in self.supported_messages
+
+    def list_all(self, on_complete=None):
         if self.connected:
             self.report({'INFO'}, "Refreshing available meshes...")
+            self.on_list_complete = on_complete
 
             future = run_coroutine_threadsafe(
                 self.list_all_async(), self.loop)
@@ -77,9 +102,10 @@ class PlasticityClient:
             "<I", self.message_id)
         await self.websocket.send(get_objects_message)
 
-    def list_visible(self):
+    def list_visible(self, on_complete=None):
         if self.connected:
             self.report({'INFO'}, "Refreshing visible meshes...")
+            self.on_list_complete = on_complete
 
             future = run_coroutine_threadsafe(
                 self.list_visible_async(), self.loop)
@@ -219,6 +245,88 @@ class PlasticityClient:
 
         await self.websocket.send(refacet_message)
 
+    def put_some(self, groups, items):
+        if self.connected:
+            self.report({'INFO'}, f"Uploading {len(groups)} groups and {len(items)} items to Plasticity...")
+
+            future = run_coroutine_threadsafe(
+                self.put_some_async(groups, items), self.loop)
+            future.result()
+
+    async def put_some_async(self, groups, items):
+        self.message_id += 1
+
+        message = struct.pack("<I", MessageType.PUT_SOME_1.value)
+        message += struct.pack("<I", self.message_id)
+
+        message += struct.pack("<I", len(groups))
+        for group in groups:
+            blender_collection_id_bytes = group["blender_collection_id"].encode('utf-8')
+            blender_collection_id_padding = (4 - (len(blender_collection_id_bytes) % 4)) % 4
+
+            name_bytes = group["name"].encode('utf-8')
+            name_padding = (4 - (len(name_bytes) % 4)) % 4
+
+            parent_blender_collection_id_bytes = group["parent_blender_collection_id"].encode('utf-8')
+            parent_blender_collection_id_padding = (4 - (len(parent_blender_collection_id_bytes) % 4)) % 4
+
+            message += struct.pack("<I", len(blender_collection_id_bytes))
+            message += blender_collection_id_bytes
+            message += b'\x00' * blender_collection_id_padding
+
+            message += struct.pack("<I", len(name_bytes))
+            message += name_bytes
+            message += b'\x00' * name_padding
+
+            message += struct.pack("<I", len(parent_blender_collection_id_bytes))
+            message += parent_blender_collection_id_bytes
+            message += b'\x00' * parent_blender_collection_id_padding
+
+            message += struct.pack("<I", group.get("existing_group_id", 0))
+
+        message += struct.pack("<I", len(items))
+        for item in items:
+            blender_id_bytes = item["blender_id"].encode('utf-8')
+            blender_id_padding = (4 - (len(blender_id_bytes) % 4)) % 4
+
+            name_bytes = item["name"].encode('utf-8')
+            name_padding = (4 - (len(name_bytes) % 4)) % 4
+
+            parent_blender_collection_id_bytes = item["parent_blender_collection_id"].encode('utf-8')
+            parent_blender_collection_id_padding = (4 - (len(parent_blender_collection_id_bytes) % 4)) % 4
+
+            message += struct.pack("<I", len(blender_id_bytes))
+            message += blender_id_bytes
+            message += b'\x00' * blender_id_padding
+
+            message += struct.pack("<I", len(name_bytes))
+            message += name_bytes
+            message += b'\x00' * name_padding
+
+            message += struct.pack("<I", len(parent_blender_collection_id_bytes))
+            message += parent_blender_collection_id_bytes
+            message += b'\x00' * parent_blender_collection_id_padding
+
+            message += struct.pack("<I", item.get("existing_stable_id", 0))
+            message += struct.pack("<Q", item["options"])
+
+            positions = item["positions"]
+            vertex_count = len(positions) // 3
+            message += struct.pack("<I", vertex_count)
+            message += struct.pack(f"<{len(positions)}f", *positions)
+
+            indices = item["indices"]
+            sizes = item["sizes"]
+            face_count = len(sizes)
+            index_count = len(indices)
+
+            message += struct.pack("<I", face_count)
+            message += struct.pack("<I", index_count)
+            message += struct.pack(f"<{index_count}I", *indices)
+            message += struct.pack(f"<{face_count}I", *sizes)
+
+        await self.websocket.send(message)
+
     def connect(self, server):
         loop = self.loop
         websocket_thread = threading.Thread(
@@ -236,6 +344,8 @@ class PlasticityClient:
                 self.message_id = 0
                 self.server = server
                 self.handler.on_connect()
+
+                await self.handshake_async()
 
                 while True:
                     try:
@@ -334,6 +444,12 @@ class PlasticityClient:
 
         elif message_type == MessageType.REFACET_SOME_1:
             self.__on_refacet(view, offset)
+
+        elif message_type == MessageType.PUT_SOME_1:
+            self.__on_put_some(view, offset)
+
+        elif message_type == MessageType.HANDSHAKE_1:
+            self.__on_handshake(view, offset)
 
     def __on_transaction(self, view, offset, update_only):
         filename_length = int.from_bytes(view[offset:offset + 4], 'little')
@@ -488,6 +604,80 @@ class PlasticityClient:
 
         bpy.app.timers.register(lambda: self.handler.on_refacet(filename, file_version, plasticity_ids,
                                 versions, faces, positions, indices, normals, groups, face_ids), first_interval=0.001)
+
+    def __on_put_some(self, view, offset):
+        message_id = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        code = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        num_groups = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        group_results = []
+        for _ in range(num_groups):
+            blender_collection_id_length = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
+
+            blender_collection_id = view[offset:offset + blender_collection_id_length].tobytes().decode('utf-8')
+            offset += blender_collection_id_length
+
+            padding = (4 - (blender_collection_id_length % 4)) % 4
+            offset += padding
+
+            group_id = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
+
+            group_results.append({"blender_collection_id": blender_collection_id, "group_id": group_id})
+
+        num_items = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        item_results = []
+        for _ in range(num_items):
+            blender_id_length = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
+
+            blender_id = view[offset:offset + blender_id_length].tobytes().decode('utf-8')
+            offset += blender_id_length
+
+            padding = (4 - (blender_id_length % 4)) % 4
+            offset += padding
+
+            stable_id = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
+
+            version_id = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
+
+            item_results.append({"blender_id": blender_id, "stable_id": stable_id, "version_id": version_id})
+
+        if code != 200:
+            self.report({'ERROR'}, f"PutSome failed with code: {code}")
+        else:
+            self.report({'INFO'}, f"PutSome succeeded: {len(group_results)} groups, {len(item_results)} items")
+
+        bpy.app.timers.register(
+            lambda: self.handler.on_put_some(code, group_results, item_results), first_interval=0.001)
+
+    def __on_handshake(self, view, offset):
+        message_id = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        num_messages = int.from_bytes(view[offset:offset + 4], 'little')
+        offset += 4
+
+        self.supported_messages = set()
+        for _ in range(num_messages):
+            msg_type = int.from_bytes(view[offset:offset + 4], 'little')
+            offset += 4
+            self.supported_messages.add(msg_type)
+
+        self.report({'INFO'}, f"Handshake complete: {num_messages} supported messages")
+
+        bpy.app.timers.register(
+            lambda: self.handler.on_handshake(self.supported_messages), first_interval=0.001)
 
     def on_message_item(self, view, transaction):
         offset = 0

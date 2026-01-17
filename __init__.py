@@ -2,11 +2,14 @@ bl_info = {
     "name": "Plasticity",
     "description": "A bridge to Plasticity",
     "author": "Nick Kallen, User129863",
-    "version": (2, 0, 5),
+    "version": (2, 1, 0),
     "blender": (4, 1, 0),
     "location": "View3D > Sidebar > Plasticity",
     "category": "Object",
 }
+
+def get_version_string():
+    return ".".join(str(v) for v in bl_info["version"])
 
 import bpy
 
@@ -16,6 +19,7 @@ from .handler import SceneHandler
 
 handler = SceneHandler()
 plasticity_client = PlasticityClient(handler)
+handler.client = plasticity_client
 
 
 def select_similar(self, context):

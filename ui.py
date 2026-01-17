@@ -1,8 +1,8 @@
 import bpy
 import math
 
-from .__init__ import plasticity_client
-from .client import FacetShapeType
+from .__init__ import plasticity_client, get_version_string
+from .client import FacetShapeType, MessageType
 
 
 class ConnectButton(bpy.types.Operator):
@@ -38,7 +38,7 @@ class DisconnectButton(bpy.types.Operator):
 class ListButton(bpy.types.Operator):
     bl_idname = "wm.list"
     bl_label = "Refresh"
-    bl_description = "Refresh the list of available items"
+    bl_description = "Refresh the list of available items and sync Outbox to Plasticity"
 
     @classmethod
     def poll(cls, context):
@@ -48,10 +48,21 @@ class ListButton(bpy.types.Operator):
 
     def execute(self, context):
         only_visible = context.scene.prop_plasticity_list_only_visible
+
+        def on_complete(filename):
+            if not plasticity_client.supports(MessageType.PUT_SOME_1):
+                return
+
+            outbox_data = plasticity_client.handler.get_outbox_data(filename, only_visible)
+            if not outbox_data["groups"] and not outbox_data["items"]:
+                return
+
+            plasticity_client.put_some(outbox_data["groups"], outbox_data["items"])
+
         if only_visible:
-            plasticity_client.list_visible()
+            plasticity_client.list_visible(on_complete)
         else:
-            plasticity_client.list_all()
+            plasticity_client.list_all(on_complete)
         return {'FINISHED'}
 
 
@@ -150,7 +161,7 @@ class RefacetButton(bpy.types.Operator):
 
 class PlasticityPanel(bpy.types.Panel):
     bl_idname = "OBJECT_PT_plasticity_panel"
-    bl_label = "Plasticity"
+    bl_label = f"Plasticity (v{get_version_string()})"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'Plasticity'
