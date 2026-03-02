@@ -378,7 +378,7 @@ class SceneHandler:
 
                 rounded_corners = subsurf_modifier.boundary_smooth == 'ALL'
                 merge_patches = obj.get("pns_merge_patches", True)
-                interpolate_boundary = obj.get("pns_interpolate_boundary", True)
+                interpolate_boundary = obj.get("pns_interpolate_boundary", False)
 
                 options = KIND_SUBD
                 if rounded_corners:
@@ -396,6 +396,11 @@ class SceneHandler:
 
                 positions = np.empty(len(mesh.vertices) * 3, dtype=np.float32)
                 mesh.vertices.foreach_get("co", positions)
+
+                # Apply object transform to get world coordinates
+                matrix = np.array(obj.matrix_world)
+                positions = positions.reshape(-1, 3)
+                positions = (positions @ matrix[:3, :3].T + matrix[:3, 3]).flatten().astype(np.float32)
 
                 indices = []
                 sizes = []

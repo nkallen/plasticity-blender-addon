@@ -245,19 +245,25 @@ class PlasticityClient:
 
         await self.websocket.send(refacet_message)
 
-    def put_some(self, groups, items):
+    def put_some(self, filename, groups, items):
         if self.connected:
             self.report({'INFO'}, f"Uploading {len(groups)} groups and {len(items)} items to Plasticity...")
 
             future = run_coroutine_threadsafe(
-                self.put_some_async(groups, items), self.loop)
+                self.put_some_async(filename, groups, items), self.loop)
             future.result()
 
-    async def put_some_async(self, groups, items):
+    async def put_some_async(self, filename, groups, items):
         self.message_id += 1
 
         message = struct.pack("<I", MessageType.PUT_SOME_1.value)
         message += struct.pack("<I", self.message_id)
+
+        filename_bytes = filename.encode('utf-8')
+        filename_padding = (4 - (len(filename_bytes) % 4)) % 4
+        message += struct.pack("<I", len(filename_bytes))
+        message += filename_bytes
+        message += b'\x00' * filename_padding
 
         message += struct.pack("<I", len(groups))
         for group in groups:

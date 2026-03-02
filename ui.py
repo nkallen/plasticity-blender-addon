@@ -1,5 +1,6 @@
 import bpy
 import math
+import os
 
 from .__init__ import plasticity_client, get_version_string
 from .client import FacetShapeType, MessageType
@@ -57,7 +58,8 @@ class ListButton(bpy.types.Operator):
             if not outbox_data["groups"] and not outbox_data["items"]:
                 return
 
-            plasticity_client.put_some(outbox_data["groups"], outbox_data["items"])
+            blender_filename = os.path.basename(bpy.data.filepath) or "Untitled.blend"
+            plasticity_client.put_some(blender_filename, outbox_data["groups"], outbox_data["items"])
 
         if only_visible:
             plasticity_client.list_visible(on_complete)
