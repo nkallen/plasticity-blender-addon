@@ -22,6 +22,10 @@ class ObjectType(Enum):
     EMPTY = 6
 
 
+KIND_MESH = 0
+KIND_SUBD = 1
+
+
 class SceneHandler:
     def __init__(self):
         # NOTE: filename -> [item/group] -> id -> object
@@ -335,10 +339,74 @@ class SceneHandler:
             outbox_collection["outbox"] = True
         return outbox_collection
 
-    def get_outbox_data(self, filename, only_visible=False):
-        KIND_MESH = 0
-        KIND_SUBD = 1
+    def __put_export_data_for_object(self, obj):
+        if obj.mode == 'EDIT':
+            obj.update_from_editmode()
 
+        modifier_states = [(mod, mod.show_viewport) for mod in obj.modifiers]
+        subsurf_modifier = next(
+            (mod for mod, show_viewport in modifier_states if mod.type == 'SUBSURF' and show_viewport),
+            None,
+        )
+        disable_from_here = False
+        evaluated_obj = None
+        mesh = None
+        options = KIND_MESH
+
+        try:
+            if subsurf_modifier:
+                options = KIND_SUBD
+                if subsurf_modifier.boundary_smooth == 'ALL':
+                    options |= (1 << 8)
+                if obj.get("pns_merge_patches", True):
+                    options |= (1 << 9)
+                if obj.get("pns_interpolate_boundary", False):
+                    options |= (1 << 10)
+
+            # Export the visible evaluated stack, but stop before the first
+            # viewport-visible subdivision modifier so Plasticity gets the cage
+            # for the single SUBD stage it can represent.
+            for mod, _ in modifier_states:
+                if disable_from_here or mod == subsurf_modifier:
+                    mod.show_viewport = False
+                    disable_from_here = True
+
+            bpy.context.view_layer.update()
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+            evaluated_obj = obj.evaluated_get(depsgraph)
+            mesh = evaluated_obj.to_mesh()
+            if mesh is None:
+                return None
+
+            positions = np.empty(len(mesh.vertices) * 3, dtype=np.float32)
+            mesh.vertices.foreach_get("co", positions)
+
+            matrix = np.array(obj.matrix_world)
+            positions = positions.reshape(-1, 3)
+            positions = (positions @ matrix[:3, :3].T + matrix[:3, 3]).flatten().astype(np.float32)
+
+            indices = []
+            sizes = []
+            for poly in mesh.polygons:
+                sizes.append(poly.loop_total)
+                for loop_idx in range(poly.loop_start, poly.loop_start + poly.loop_total):
+                    indices.append(mesh.loops[loop_idx].vertex_index)
+
+            return {
+                "options": options,
+                "positions": positions,
+                "indices": np.array(indices, dtype=np.uint32),
+                "sizes": np.array(sizes, dtype=np.uint32),
+            }
+        finally:
+            if evaluated_obj is not None and mesh is not None:
+                evaluated_obj.to_mesh_clear()
+
+            for mod, show_viewport in modifier_states:
+                mod.show_viewport = show_viewport
+            bpy.context.view_layer.update()
+
+    def get_outbox_data(self, filename, only_visible=False):
         outbox_collection = self.__outbox_for_filename(filename)
         groups = []
         items = []
@@ -366,48 +434,10 @@ class SceneHandler:
                 if only_visible and not obj.visible_get():
                     continue
 
-                subsurf_modifier = None
-                for mod in obj.modifiers:
-                    if mod.type == 'SUBSURF':
-                        subsurf_modifier = mod
-                        break
-
-                if not subsurf_modifier:
-                    self.report({'WARNING'}, f"Object '{obj.name}' has no Subdivision modifier, skipping")
+                export_data = self.__put_export_data_for_object(obj)
+                if export_data is None:
+                    self.report({'WARNING'}, f"Object '{obj.name}' could not be converted to a mesh, skipping")
                     continue
-
-                rounded_corners = subsurf_modifier.boundary_smooth == 'ALL'
-                merge_patches = obj.get("pns_merge_patches", True)
-                interpolate_boundary = obj.get("pns_interpolate_boundary", False)
-
-                options = KIND_SUBD
-                if rounded_corners:
-                    options |= (1 << 8)
-                if merge_patches:
-                    options |= (1 << 9)
-                if interpolate_boundary:
-                    options |= (1 << 10)
-
-                if obj.mode == 'EDIT':
-                    obj.update_from_editmode()
-
-                mesh = obj.data
-                mesh.calc_loop_triangles()
-
-                positions = np.empty(len(mesh.vertices) * 3, dtype=np.float32)
-                mesh.vertices.foreach_get("co", positions)
-
-                # Apply object transform to get world coordinates
-                matrix = np.array(obj.matrix_world)
-                positions = positions.reshape(-1, 3)
-                positions = (positions @ matrix[:3, :3].T + matrix[:3, 3]).flatten().astype(np.float32)
-
-                indices = []
-                sizes = []
-                for poly in mesh.polygons:
-                    sizes.append(poly.loop_total)
-                    for loop_idx in range(poly.loop_start, poly.loop_start + poly.loop_total):
-                        indices.append(mesh.loops[loop_idx].vertex_index)
 
                 blender_id = obj.get("blender_pns_id")
                 if not blender_id:
@@ -419,10 +449,7 @@ class SceneHandler:
                     "name": obj.name,
                     "parent_blender_collection_id": current_parent_id,
                     "existing_stable_id": obj.get("plasticity_id", 0),
-                    "options": options,
-                    "positions": positions,
-                    "indices": np.array(indices, dtype=np.uint32),
-                    "sizes": np.array(sizes, dtype=np.uint32),
+                    **export_data,
                 })
 
             for child in collection.children:
