@@ -25,7 +25,6 @@ class ObjectType(Enum):
 KIND_MESH = 0
 KIND_SUBD = 1
 
-
 class SceneHandler:
     def __init__(self):
         # NOTE: filename -> [item/group] -> id -> object
@@ -46,13 +45,10 @@ class SceneHandler:
         mesh.polygons.foreach_set("loop_start", np.arange(
             0, len(indices), 3, dtype=np.int32))
 
-        safe_loop_normals(mesh, indices, normals)
-
         # NOTE: As of blender 4.2, the concrete type of user attributes cannot be numpy arrays.
         assert isinstance(groups, list)
         assert isinstance(face_ids, list)
-        mesh["groups"] = groups
-        mesh["face_ids"] = face_ids
+        safe_mesh_import_data(mesh, indices, normals, groups, face_ids)
 
         return mesh
 
@@ -77,15 +73,8 @@ class SceneHandler:
 
         # NOTE: As of blender 4.2, the concrete type of user attributes cannot be numpy arrays.
         assert isinstance(groups, list)
-        assert isinstance(face_ids, list)  
-        mesh["groups"] = groups
-        mesh["face_ids"] = face_ids
-
-        mesh.update()
-
-        safe_loop_normals(mesh, indices, normals)
-
-        self.update_pivot(obj)
+        assert isinstance(face_ids, list)
+        safe_mesh_import_data(mesh, indices, normals, groups, face_ids)
 
     def __update_mesh_ngons(self, obj, version, faces, verts, indices, normals, groups, face_ids):
         if obj.mode == 'EDIT':
@@ -94,10 +83,18 @@ class SceneHandler:
         mesh = obj.data
         mesh.clear_geometry()
 
-        verts_array = np.array(verts).reshape(-1, 3)
+        verts_array = np.asarray(verts, dtype=np.float32).reshape(-1, 3)
+        indices = np.asarray(indices, dtype=np.int32)
         unique_verts, inverse_indices = np.unique(
             verts_array, axis=0, return_inverse=True)
-        new_indices = inverse_indices[indices]
+        new_indices = inverse_indices[indices].astype(np.int32, copy=False)
+        indices, new_indices, loop_total, groups, face_ids, removed_corners, dropped_polygons = sanitize_deduped_polygons(
+            indices,
+            new_indices,
+            faces,
+            groups,
+            face_ids,
+        )
 
         mesh.vertices.add(len(unique_verts))
         mesh.vertices.foreach_set("co", unique_verts.ravel())
@@ -105,56 +102,19 @@ class SceneHandler:
         mesh.loops.add(len(indices))
         mesh.loops.foreach_set("vertex_index", new_indices)
 
-        if (len(faces) == 0):
-            mesh.polygons.add(len(new_indices) // 3)
-            mesh.polygons.foreach_set(
-                "loop_start", range(0, len(new_indices), 3))
-            mesh.polygons.foreach_set(
-                "loop_total", [3] * (len(new_indices) // 3))
-
-            safe_loop_normals(mesh, indices, normals)
-        else:
-            # Find where a new face/polygon starts (value changes in the array)
-            diffs = np.where(np.diff(faces))[0] + 1
-            # Insert the starting index for the first polygon
-            loop_start = np.insert(diffs, 0, 0)
-            # Calculate the number of vertices per polygon
-            loop_total = np.append(np.diff(loop_start), [
-                                   len(faces) - loop_start[-1]])
+        if len(loop_total):
+            loop_start = np.concatenate((
+                np.array([0], dtype=np.int32),
+                np.cumsum(loop_total[:-1], dtype=np.int32),
+            ))
             mesh.polygons.add(len(loop_start))
             mesh.polygons.foreach_set("loop_start", loop_start)
             mesh.polygons.foreach_set("loop_total", loop_total)
 
-            safe_loop_normals(mesh, indices, normals)
-
-
         # NOTE: As of blender 4.2, the concrete type of user attributes cannot be numpy arrays.
         assert isinstance(groups, list)
         assert isinstance(face_ids, list)
-        mesh["groups"] = groups
-        mesh["face_ids"] = face_ids
-
-
-        self.update_pivot(obj)
-
-    def update_pivot(self, obj):
-        # NOTE: this doesn't work unfortunately. It seems like changing matrix_world or matrix_local
-        # is only possible in special contexts that I cannot yet figure out.
-        return
-        if not "plasticity_transform" in obj:
-            return
-        transform_list = obj["plasticity_transform"]
-        if transform_list is not None:
-            bpy.context.view_layer.objects.active = obj
-            obj.select_set(True)
-            bpy.ops.object.mode_set(mode='OBJECT')
-            old_matrix_world = obj.matrix_world.copy()
-            transform = np.array(transform_list).reshape(4, 4)
-            obj.matrix_world = mathutils.Matrix(transform)
-            obj.matrix_world.invert()
-            bpy.ops.object.transform_apply(
-                location=True, rotation=True, scale=True)
-            obj.matrix_world = old_matrix_world
+        safe_mesh_import_data(mesh, indices, normals, groups, face_ids)
 
     def __add_object(self, filename, object_type, plasticity_id, name, mesh):
         mesh_obj = bpy.data.objects.new(name, mesh)
@@ -649,16 +609,184 @@ class SceneHandler:
     def report(self, level, message):
         print(message)
 
-def safe_loop_normals(mesh, indices, normals):
+def safe_mesh_import_data(mesh, indices, normals, groups, face_ids):
+    if len(mesh.polygons) == 0 or len(indices) == 0 or len(face_ids) == 0:
+        mesh.update()
+        mesh["groups"] = []
+        mesh["face_ids"] = []
+        return
+
+    original_groups = groups
+    original_face_ids = face_ids
+    original_polygon_count = len(mesh.polygons)
+    loop_normals = np.ascontiguousarray(normals.reshape(-1, 3)[indices], dtype=np.float32)
     mesh.attributes.new("temp_custom_normals", 'FLOAT_VECTOR', 'CORNER')
-    mesh.attributes["temp_custom_normals"].data.foreach_set("vector", normals.reshape(-1, 3)[indices].ravel())
+    mesh.attributes["temp_custom_normals"].data.foreach_set(
+        "vector",
+        loop_normals.ravel(),
+    )
+
+    mesh.attributes.new("temp_group_index", 'INT', 'FACE')
+
+    polygon_group_ids = np.empty(len(mesh.polygons), dtype=np.int32)
+
+    group_idx = 0
+    group_start = groups[0]
+    group_count = groups[1]
+
+    for poly in mesh.polygons:
+        while group_idx + 1 < len(face_ids) and poly.loop_start >= group_start + group_count:
+            group_idx += 1
+            group_start = groups[group_idx * 2]
+            group_count = groups[group_idx * 2 + 1]
+
+        polygon_group_ids[poly.index] = group_idx
+
+    mesh.attributes["temp_group_index"].data.foreach_set("value", polygon_group_ids)
 
     mesh.update()
 
-    buf = np.empty(len(mesh.loops) * 3, dtype=np.float32)
-    mesh.attributes["temp_custom_normals"].data.foreach_get("vector", buf)
+    collapsed = original_polygon_count - len(mesh.polygons)
 
     mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
-
-    mesh.normals_split_custom_set(buf.reshape(-1, 3))
+    if collapsed == 0:
+        mesh.normals_split_custom_set(loop_normals.tolist())
+    else:
+        buf = np.empty(len(mesh.loops) * 3, dtype=np.float32)
+        mesh.attributes["temp_custom_normals"].data.foreach_get("vector", buf)
+        remapped_loop_normals = np.ascontiguousarray(buf.reshape(-1, 3), dtype=np.float32)
+        mesh.normals_split_custom_set(remapped_loop_normals.tolist())
     mesh.attributes.remove(mesh.attributes["temp_custom_normals"])
+
+    if collapsed == 0:
+        mesh["groups"] = original_groups
+        mesh["face_ids"] = original_face_ids
+        mesh.attributes.remove(mesh.attributes["temp_group_index"])
+        return
+
+    if len(mesh.polygons) == 0:
+        mesh["groups"] = []
+        mesh["face_ids"] = []
+        mesh.attributes.remove(mesh.attributes["temp_group_index"])
+        return
+
+    polygon_group_ids = np.empty(len(mesh.polygons), dtype=np.int32)
+    mesh.attributes["temp_group_index"].data.foreach_get("value", polygon_group_ids)
+
+    groups = []
+    face_ids = []
+    current_group_idx = None
+    current_group_start = 0
+    current_group_count = 0
+
+    for poly, group_idx in zip(mesh.polygons, polygon_group_ids):
+        group_idx = int(group_idx)
+
+        if current_group_idx is None or group_idx != current_group_idx:
+            if current_group_idx is not None:
+                groups.extend([current_group_start, current_group_count])
+                face_ids.append(original_face_ids[current_group_idx])
+
+            current_group_idx = group_idx
+            current_group_start = poly.loop_start
+            current_group_count = 0
+
+        current_group_count += poly.loop_total
+
+    groups.extend([current_group_start, current_group_count])
+    face_ids.append(original_face_ids[current_group_idx])
+
+    mesh["groups"] = groups
+    mesh["face_ids"] = face_ids
+    mesh.attributes.remove(mesh.attributes["temp_group_index"])
+
+
+# blender, unlike opengl, does NOT just use unique positions for deduplication.
+# the rules allow and sometimes require duplicate positions on the same face for example.
+def sanitize_deduped_polygons(indices, new_indices, faces, groups, face_ids):
+    if len(faces) == 0:
+        loop_start = np.arange(0, len(indices), 3, dtype=np.int32)
+        loop_total = np.full(len(indices) // 3, 3, dtype=np.int32)
+    else:
+        faces = np.asarray(faces, dtype=np.int32)
+        diffs = np.where(np.diff(faces))[0] + 1
+        loop_start = np.insert(diffs, 0, 0).astype(np.int32, copy=False)
+        loop_total = np.append(
+            np.diff(loop_start),
+            [len(faces) - loop_start[-1]],
+        ).astype(np.int32, copy=False)
+
+    filtered_indices = []
+    filtered_new_indices = []
+    filtered_loop_total = []
+    filtered_group_ids = []
+    removed_corners = 0
+    dropped_polygons = 0
+
+    group_idx = 0
+    group_start = groups[0] if groups else 0
+    group_count = groups[1] if groups else 0
+
+    for poly_loop_start, poly_loop_total in zip(loop_start, loop_total):
+        while group_idx + 1 < len(face_ids) and poly_loop_start >= group_start + group_count:
+            group_idx += 1
+            group_start = groups[group_idx * 2]
+            group_count = groups[group_idx * 2 + 1]
+
+        poly_indices = indices[poly_loop_start:poly_loop_start + poly_loop_total]
+        poly_new_indices = new_indices[poly_loop_start:poly_loop_start + poly_loop_total]
+
+        kept_indices = []
+        kept_new_indices = []
+        seen = set()
+
+        for original_index, deduped_index in zip(poly_indices, poly_new_indices):
+            deduped_index = int(deduped_index)
+            if deduped_index in seen:
+                removed_corners += 1
+                continue
+            seen.add(deduped_index)
+            kept_indices.append(int(original_index))
+            kept_new_indices.append(deduped_index)
+
+        if len(kept_new_indices) < 3:
+            dropped_polygons += 1
+            continue
+
+        filtered_indices.extend(kept_indices)
+        filtered_new_indices.extend(kept_new_indices)
+        filtered_loop_total.append(len(kept_new_indices))
+        filtered_group_ids.append(group_idx)
+
+    rebuilt_groups = []
+    rebuilt_face_ids = []
+    current_group_idx = None
+    current_group_start = 0
+    current_group_count = 0
+    loop_offset = 0
+
+    for poly_loop_total, poly_group_idx in zip(filtered_loop_total, filtered_group_ids):
+        if current_group_idx is None or poly_group_idx != current_group_idx:
+            if current_group_idx is not None:
+                rebuilt_groups.extend([current_group_start, current_group_count])
+                rebuilt_face_ids.append(face_ids[current_group_idx])
+            current_group_idx = poly_group_idx
+            current_group_start = loop_offset
+            current_group_count = 0
+
+        current_group_count += poly_loop_total
+        loop_offset += poly_loop_total
+
+    if current_group_idx is not None:
+        rebuilt_groups.extend([current_group_start, current_group_count])
+        rebuilt_face_ids.append(face_ids[current_group_idx])
+
+    return (
+        np.asarray(filtered_indices, dtype=np.int32),
+        np.asarray(filtered_new_indices, dtype=np.int32),
+        np.asarray(filtered_loop_total, dtype=np.int32),
+        rebuilt_groups,
+        rebuilt_face_ids,
+        removed_corners,
+        dropped_polygons,
+    )
